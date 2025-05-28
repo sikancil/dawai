@@ -1,0 +1,29 @@
+{
+  "name": "@arifwidianto/dawai-microservice",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "development": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!**/*.tsbuildinfo"
+  ],
+  "dependencies": {
+    "@arifwidianto/dawai-protocol-core": "0.0.1",
+    "reflect-metadata": "^0.2.2",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.10"
+  }
+}
