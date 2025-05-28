@@ -20,6 +20,10 @@
   ],
   "dependencies": {
     "@arifwidianto/dawai-protocol-core": "0.0.1",
-    "reflect-metadata": "^0.2.2"
+    "reflect-metadata": "^0.2.2",
+    "ws": "^8.17.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.10"
   }
 }
