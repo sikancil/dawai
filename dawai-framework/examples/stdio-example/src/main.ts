@@ -1,11 +1,11 @@
-import { Microservice, llmTool, getMethodMetadata, LLM_TOOL_METADATA_KEY, PluginContext } from '@arifwidianto/dawai-microservice';
+import { Microservice, llmTool, PluginContext, discoverAndRegisterMethods, LLMToolOptions } from '@arifwidianto/dawai-microservice';
 
 // Example class with decorated methods (optional, could be standalone functions too)
 class MyToolSet {
   @llmTool({ name: 'greet', description: 'Greets a person.' })
   greet(ctx: PluginContext, name: string): string {
-    const metadata = getMethodMetadata<LLMToolOptions>(LLM_TOOL_METADATA_KEY, this, 'greet');
-    console.log('[Greet Method] Metadata:', metadata);
+    // const metadata = getMethodMetadata<LLMToolOptions>(LLM_TOOL_METADATA_KEY, this, 'greet'); // Removed
+    // console.log('[Greet Method] Metadata:', metadata); // Removed
     console.log('[Greet Method] PluginContext Name:', ctx.name);
     if (!name) return 'Please provide a name.';
     return `Hello, ${name}! This is ${ctx.name} running via ${ctx.transportType}.`;
@@ -37,16 +37,25 @@ async function main() {
 
   myService.use(async (ctx) => {
     console.log(`[StdioDemoService Middleware] Request for command: ${ctx.plugin.request.command}`);
-    await ctx.plugin.next(); // Ensure this is called to proceed
+    
+    // Demonstrate accessing ctx.methods
+    if (ctx.plugin.request.command === 'greet') { // Example: only log for 'greet' command
+      const greetMethodEntry = ctx.methods.get('greet'); // Assuming 'greet' is the method name in the class
+      if (greetMethodEntry && greetMethodEntry.decorators.llmTool) {
+        console.log(`[StdioDemoService Middleware] Metadata for 'greet' (llmTool):`, greetMethodEntry.decorators.llmTool);
+      }
+    }
+    
+    await ctx.plugin.next(); 
     if (ctx.plugin.response) {
       console.log(`[StdioDemoService Middleware] Response:`, ctx.plugin.response);
     }
   });
 
   const toolSet = new MyToolSet();
-  // Register methods from the class instance, ensuring 'this' context is bound correctly
-  myService.method('greet', toolSet.greet.bind(toolSet));
-  myService.method('add', toolSet.add.bind(toolSet));
+  // Register methods from the class instance using discoverAndRegisterMethods
+  discoverAndRegisterMethods(toolSet, myService);
+  // Keep manual registration for testAsync to show it's still possible
   myService.method('testAsync', async (ctx: PluginContext, delayMs: string) => {
     console.log(`[StdioDemoService] TestAsync called for ${ctx.name}. Waiting for ${delayMs}ms...`);
     await new Promise(resolve => setTimeout(resolve, parseInt(delayMs) || 1000));

@@ -2,6 +2,7 @@
 import { StdIOTransportAdapter } from './transports/stdio';
 import { RPCTransportAdapter } from './transports/rpc'; // Added
 import type { ITransportAdapter } from './transports/interfaces';
+import type { LLMToolOptions, MCPMethodOptions, A2AMethodOptions, RestEndpointOptions } from './decorators/method-decorators';
 
 // Define types for options and context early, as they'll be used across methods
 export interface MicroserviceOptions {
@@ -23,6 +24,7 @@ export interface IMicroserviceContext {
 export interface PluginContext {
   readonly name: string;
   readonly transportType: string;
+  readonly methods: ReadonlyMap<string, MethodRegistryEntry>; // Added for middleware access
   end: () => Promise<void>;
   plugin: {
     request: any;
@@ -50,11 +52,27 @@ export type LifecycleEvent =
 export type LifecycleEventHandler = (...args: any[]) => Promise<void> | void;
 // --- End of New Lifecycle and Event System Additions ---
 
+// --- New Decorator and Method Registry Types ---
+export interface DecoratorMetadata {
+  llmTool?: LLMToolOptions;
+  mcpMethod?: MCPMethodOptions;
+  a2aMethod?: A2AMethodOptions;
+  restEndpoint?: RestEndpointOptions;
+  // Add other decorator option types here if they exist
+}
+
+export interface MethodRegistryEntry {
+  name: string;
+  handler: MethodHandler;
+  decorators: DecoratorMetadata;
+}
+// --- End of New Decorator and Method Registry Types ---
+
 export class Microservice {
   public readonly name: string;
   public readonly transportType: string;
   private middlewares: MiddlewareFunction[] = [];
-  private methods: Map<string, MethodHandler> = new Map(); // To store registered methods
+  private methods: Map<string, MethodRegistryEntry> = new Map(); // To store registered methods
   private transportAdapter: ITransportAdapter | null = null;
   private options: MicroserviceOptions; // Store options if needed for transport
   
@@ -181,20 +199,29 @@ export class Microservice {
   }
   // --- End of New Lifecycle and Event System Methods ---
 
+  private _registerMethodEntry(entry: MethodRegistryEntry): void {
+    if (this.methods.has(entry.name)) {
+      console.warn(`Method '${entry.name}' in microservice '${this.name}' is being overwritten during registration.`);
+    }
+    this.methods.set(entry.name, entry);
+  }
+
   public use(middleware: MiddlewareFunction): this {
     this.middlewares.push(middleware);
     return this;
   }
 
   public method(methodName: string, handler: MethodHandler): this {
-    if (this.methods.has(methodName)) {
-      console.warn(`Method '${methodName}' in microservice '${this.name}' is being overwritten.`);
-    }
-    this.methods.set(methodName, handler);
+    const entry: MethodRegistryEntry = {
+      name: methodName,
+      handler: handler,
+      decorators: {} // No decorators when using the simple .method() registration
+    };
+    this._registerMethodEntry(entry);
     return this;
   }
 
-  public getMethod(methodName: string): MethodHandler | undefined {
+  public getMethod(methodName: string): MethodRegistryEntry | undefined {
     return this.methods.get(methodName);
   }
 
@@ -217,6 +244,7 @@ export class Microservice {
               await executeMiddlewareAtIndex(index + 1, ctx.plugin.request, ctx.plugin.response);
             },
           },
+          methods: this.methods, // Populate methods for middleware
         };
         try {
           await middleware(ctx);

@@ -62,10 +62,10 @@ export class RPCTransportAdapter implements ITransportAdapter {
               return;
             }
 
-            const methodHandler = this.microservice.getMethod(rpcRequest.method);
+            const methodEntry = this.microservice.getMethod(rpcRequest.method);
             let response: RPCResponse;
 
-            if (methodHandler) {
+            if (methodEntry) {
               const context: PluginContext = {
                 name: this.microservice.name,
                 transportType: 'rpc',
@@ -75,13 +75,14 @@ export class RPCTransportAdapter implements ITransportAdapter {
                   response: null, 
                   next: async () => { /* no-op for direct method calls in RPC */ },
                 },
+                methods: this.microservice.methods, // Populate methods for direct call context
                 rpcContext: { // Example of adding RPC-specific details
                   clientId: ws.toString(), // Could be a more sophisticated client ID
                   requestId: rpcRequest.id 
                 }
               };
               try {
-                const result = await methodHandler(context, ...(rpcRequest.args || []));
+                const result = await methodEntry.handler(context, ...(rpcRequest.args || []));
                 response = { type: 'response', id: rpcRequest.id, result: result };
               } catch (error) {
                 console.error(`Error executing RPC method '${rpcRequest.method}':`, error);

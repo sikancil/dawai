@@ -32,9 +32,9 @@ export class StdIOTransportAdapter implements ITransportAdapter {
       }
 
       const [command, ...args] = trimmedLine.split(/\s+/);
-      const methodHandler = this.microservice.getMethod(command);
+      const methodEntry = this.microservice.getMethod(command);
 
-      if (methodHandler) {
+      if (methodEntry) {
         const context: PluginContext = {
           name: this.microservice.name,
           transportType: 'stdio',
@@ -44,9 +44,10 @@ export class StdIOTransportAdapter implements ITransportAdapter {
             response: null,
             next: async () => { /* no-op for direct method calls in stdio */ },
           },
+          methods: this.microservice.methods, // Populate methods for direct call context
         };
         try {
-          const result = await methodHandler(context, ...args);
+          const result = await methodEntry.handler(context, ...args);
           if (result !== undefined) {
             console.log(typeof result === 'object' ? JSON.stringify(result, null, 2) : result);
           }
