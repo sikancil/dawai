@@ -1,0 +1,29 @@
+{
+  "name": "@arifwidianto/dawai-example-task-management-service",
+  "version": "0.0.1",
+  "description": "DAWAI Framework - Task Management Service Example",
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/main.ts",
+    "start:rpc:server": "tsx src/main.ts rpc",
+    "start:rpc:client": "tsx src/client.ts",
+    "dev": "tsx --watch src/main.ts",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write ."
+  },
+  "dependencies": {
+    "@arifwidianto/dawai-microservice": "0.0.1",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "tsx": "^4.19.2",
+    "ts-node": "^10.9.0",
+    "ts-node-dev": "^2.0.0",
+    "@types/node": "^20.0.0",
+    "@types/ws": "^8.5.10"
+  },
+  "private": true
+}
