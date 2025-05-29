@@ -1,0 +1,49 @@
+{
+  "name": "@arifwidianto/dawai",
+  "version": "0.0.0",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write .",
+    "example:01:start:server": "npm run start:server --workspace=examples/rpc-example",
+    "example:01:start:client": "npm run start:client --workspace=examples/rpc-example",
+    "example:02:start": "npm run start --workspace=examples/stdio-example",
+    "example:03:start": "npm run start --workspace=examples/task-management-service",
+    "example:03:start:rpc:server": "npm run start:rpc:server --workspace=examples/task-management-service",
+    "example:03:start:rpc:client": "npm run start:rpc:client --workspace=examples/task-management-service"
+  },
+  "private": true,
+  "devDependencies": {
+    "@nx/js": "21.1.2",
+    "@swc-node/register": "~1.9.1",
+    "@swc/core": "~1.5.7",
+    "@swc/helpers": "~0.5.11",
+    "@types/node": "18.16.9",
+    "eslint": "^9.27.0",
+    "lerna": "^8.2.2",
+    "nx": "21.1.2",
+    "prettier": "^3.5.3",
+    "tslib": "^2.3.0",
+    "typescript": "~5.7.2",
+    "typescript-eslint": "^8.33.0",
+    "verdaccio": "^6.0.5"
+  },
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
+  "nx": {
+    "includedScripts": [],
+    "targets": {
+      "local-registry": {
+        "executor": "@nx/js:verdaccio",
+        "options": {
+          "port": 4873,
+          "config": ".verdaccio/config.yml",
+          "storage": "tmp/local-registry/storage"
+        }
+      }
+    }
+  }
+}
