@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.lib.json",
+  "compilerOptions": {
+    "module": "NodeNext", // Changed from commonjs
+    "outDir": "./dist/cjs",
+    "declaration": true, // Changed from false
+    "declarationDir": "../types", // Keep types separate for CJS if needed or align with ESM
+    "esModuleInterop": true, // Often useful for CJS output
+    "skipLibCheck": true // If you have issues with d.ts files from dependencies
+  },
+  "exclude": [
+    "node_modules",
+    "dist/esm", // Exclude ESM output directory
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
+}
