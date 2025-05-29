@@ -2,6 +2,9 @@
 
 # compiled output
 dist
+packages/*/dist
+packages/*/lib
+packages/types
 tmp
 out-tsc
 
