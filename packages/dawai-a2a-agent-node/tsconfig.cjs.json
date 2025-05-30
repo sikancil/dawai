@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.lib.json",
+  "compilerOptions": {
+    "module": "NodeNext", 
+    "outDir": "./dist/cjs",
+    "declaration": true, 
+    "declarationDir": "./dist/types",
+    "esModuleInterop": true,
+    "skipLibCheck": true 
+  },
+  "exclude": [
+    "node_modules",
+    "dist/esm", 
+    "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
+}
