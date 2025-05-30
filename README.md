@@ -1,110 +1,68 @@
-# DawaiFramework
+# 🚀 `dawai` Monorepo
 
-<a alt="Nx logo" href="https://nx.dev" target="_blank" rel="noreferrer"><img src="https://raw.githubusercontent.com/nrwl/nx/master/images/nx-logo.png" width="45"></a>
+`dawai`! 🎉 This framework is your go-to solution for building robust microservices and powerful tool-based applications. It simplifies defining services, methods, and how they talk to each other.
 
-✨ Your new, shiny [Nx workspace](https://nx.dev) is ready ✨.
+## 🤔 What's "dawai"?
 
-[Learn more about this workspace setup and its capabilities](https://nx.dev/nx-api/js?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or run `npx nx graph` to visually explore what was created. Now, let's get you up to speed!
+The name "dawai" (Indonesian) has a couple of interesting meanings:
+*   🎶 In **music**, a "dawai" is a string – like on a guitar or piano – that vibrates to create sound. It's a fundamental element for beautiful melodies.
+*   🔬 In **physics** (specifically String Theory), a "dawai" is a tiny, one-dimensional vibrating object, a basic building block of elementary particles.
 
-## Generate a library
+In essence, "dawai" represents a fundamental, vibrating element that can connect and create, much like how this framework aims to connect services and enable creation!
 
-```sh
-npx nx g @nx/js:lib packages/pkg1 --publishable --importPath=@my-org/pkg1
-```
+## 🏗️ Core Packages
 
-## Run tasks
+The magic of `dawai` is organized into these core packages:
 
-To build the library use:
+-   **`packages/dawai-microservice`**: The heart of your services! ❤️
+    -   Provides the `Microservice` class – the foundation for all your service creations.
+    -   Comes packed with handy decorators like `@llmTool`, `@mcpMethod`, `@a2aMethod`, and `@restEndpoint` to easily define your service methods and their special powers.
+    -   Supports various communication styles (transports) like RPC and Stdio, so your services can chat in different ways.
+-   **`packages/dawai-protocol-core`**: This is the rulebook 📖 that ensures all parts of `dawai` speak the same language. It defines the core protocol specifications and interfaces.
 
-```sh
-npx nx build pkg1
-```
+## ✨ Examples in Action!
 
-To run any task with Nx use:
+Curious how to use `dawai`? Check out the `examples/` directory. It's full of practical showcases:
 
-```sh
-npx nx <target> <project-name>
-```
+-   **`examples/rpc-example`**: See how to set up a classic client-server chat using RPC (Remote Procedure Call).
+    -   `server.ts`: Implements `MyRpcToolSet` with cool methods like `greet` and `add`.
+    -   `client.ts`: Shows how your client can easily call the server's methods.
+-   **`examples/stdio-example`**: Want to build a service that talks through the command line (standard input/output)? This one's for you!
+    -   `main.ts`: Implements `MyToolSet` with methods like `greet` and `add`, all over stdio.
+-   **`examples/task-management-service`**: A more beefy example! 💪 This one builds a full task management service.
+    -   `main.ts` (Server-side): Contains the `TaskService` with all the logic for adding, getting, listing, completing, and even categorizing tasks.
+    -   `client.ts`: Provides a `TaskManagementClient` so you can interact with your `TaskService` like a pro.
 
-These targets are either [inferred automatically](https://nx.dev/concepts/inferred-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) or defined in the `project.json` or `package.json` files.
+## 🏁 Getting Started
 
-[More about running tasks in the docs &raquo;](https://nx.dev/features/run-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+Ready to dive in? *(This section is a great place to add detailed setup and run instructions!)*
 
-## Versioning and releasing
-
-To version and release the library use
-
-```
-npx nx release
-```
-
-Pass `--dry-run` to see what would happen without actually releasing the library.
-
-[Learn more about Nx release &raquo;](hhttps://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Keep TypeScript project references up to date
-
-Nx automatically updates TypeScript [project references](https://www.typescriptlang.org/docs/handbook/project-references.html) in `tsconfig.json` files to ensure they remain accurate based on your project dependencies (`import` or `require` statements). This sync is automatically done when running tasks such as `build` or `typecheck`, which require updated references to function correctly.
-
-To manually trigger the process to sync the project graph dependencies information to the TypeScript project references, run the following command:
+Building packages is a breeze with Nx. To build a specific package, just run:
 
 ```sh
-npx nx sync
+npx nx build <package-name>
 ```
 
-You can enforce that the TypeScript project references are always in the correct state when running in CI by adding a step to your CI job configuration that runs the following command:
-
+For example, to build the main microservice package:
 ```sh
-npx nx sync:check
+npx nx build dawai-microservice
 ```
+Isn't that easy? 😎
 
-[Learn more about nx sync](https://nx.dev/reference/nx-commands#sync)
+To run an example, hop into its directory. Check its `README.md` or `package.json` for specific run commands (often `npm start` or an `nx` command).
 
-## Set up CI!
-
-### Step 1
-
-To connect to Nx Cloud, run the following command:
-
+Let's say you want to run the `stdio-example`:
 ```sh
-npx nx connect
+cd examples/stdio-example
+# Now, look for a start script in its package.json!
+# It might be something like: npm run start OR npx nx serve stdio-example
 ```
 
-Connecting to Nx Cloud ensures a [fast and scalable CI](https://nx.dev/ci/intro/why-nx-cloud?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects) pipeline. It includes features such as:
+## 🛠️ Development with Nx
 
-- [Remote caching](https://nx.dev/ci/features/remote-cache?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task distribution across multiple machines](https://nx.dev/ci/features/distribute-task-execution?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Automated e2e test splitting](https://nx.dev/ci/features/split-e2e-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Task flakiness detection and rerunning](https://nx.dev/ci/features/flaky-tasks?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+This workspace is supercharged by [Nx](https://nx.dev)! Nx helps manage everything from generating code to running tasks and releasing your awesome packages.
 
-### Step 2
+Happy coding with `dawai`! 🚀 If you have ideas or contributions, this is where you'd find info on how to help. *(Consider adding contribution guidelines here!)*
 
-Use the following command to configure a CI workflow for your workspace:
-
-```sh
-npx nx g ci-workflow
-```
-
-[Learn more about Nx on CI](https://nx.dev/ci/intro/ci-with-nx#ready-get-started-with-your-provider?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Install Nx Console
-
-Nx Console is an editor extension that enriches your developer experience. It lets you run tasks, generate code, and improves code autocompletion in your IDE. It is available for VSCode and IntelliJ.
-
-[Install Nx Console &raquo;](https://nx.dev/getting-started/editor-setup?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-## Useful links
-
-Learn more:
-
-- [Learn more about this workspace setup](https://nx.dev/nx-api/js?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Learn about Nx on CI](https://nx.dev/ci/intro/ci-with-nx?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [Releasing Packages with Nx release](https://nx.dev/features/manage-releases?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-- [What are Nx plugins?](https://nx.dev/concepts/nx-plugins?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
-
-And join the Nx community:
-
-- [Discord](https://go.nx.dev/community)
-- [Follow us on X](https://twitter.com/nxdevtools) or [LinkedIn](https://www.linkedin.com/company/nrwl)
-- [Our Youtube channel](https://www.youtube.com/@nxdevtools)
-- [Our blog](https://nx.dev/blog?utm_source=nx_project&utm_medium=readme&utm_campaign=nx_projects)
+## LICENSE
+[MIT](LICENSE)
