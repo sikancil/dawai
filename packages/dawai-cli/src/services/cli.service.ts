@@ -45,6 +45,9 @@ const generateAppSchema = z.object({
       message: "Default service name must be a valid PascalCase JavaScript class identifier (e.g., MyService, Another_Service)."
     })
     .optional(),
+  type: z.enum(['single', 'mcp'])
+    .default('single')
+    .optional(),
 });
 type GenerateAppOptions = z.infer<typeof generateAppSchema>;
 
@@ -241,12 +244,18 @@ export class ${serviceName} {
     @Ctx() ctx: any
   ) {
     const { appName } = options; // appName is kebab-case
+    const appType = options.type; // options.type will be 'single' or 'mcp' due to schema default
     // Ensure toPascalCase from stringUtils handles kebab-case to PascalCase correctly for service name
     const defaultServiceNamePascalCase = options.defaultServiceName || toPascalCase(appName);
 
     const rootDir = path.resolve(process.cwd(), appName);
 
     try {
+      ctx.stdout.write(chalk.blue(`Generating app '${appName}' (Type: ${appType})...\n`));
+      // The rest of the logic for directory/file creation remains here...
+      // For this subtask, we are just acknowledging the type.
+      // The actual generation logic might differ based on appType in subsequent steps.
+
       if (await fs.pathExists(rootDir)) {
         const errorMsg = `Directory '${rootDir}' already exists. Please remove it or choose a different app name.`;
         ctx.stdout.write(chalk.red(errorMsg) + '\n');
@@ -280,18 +289,23 @@ export class ${serviceName} {
       ctx.stdout.write(chalk.dim(`Created ${gitIgnorePath}`) + '\n');
 
       // src/index.ts
-      const appIndexTsContent = appGenerator.generateAppIndexTsContent(defaultServiceNamePascalCase);
+      const appIndexTsContent = appGenerator.generateAppIndexTsContent(defaultServiceNamePascalCase, appType);
       const appIndexTsPath = path.join(srcDir, 'index.ts');
       await fs.writeFile(appIndexTsPath, appIndexTsContent);
       ctx.stdout.write(chalk.dim(`Created ${appIndexTsPath}`) + '\n');
 
       // src/services/<DefaultServiceName>.service.ts
-      const defaultServiceContent = appGenerator.generateDefaultServiceContent(defaultServiceNamePascalCase);
+      const defaultServiceContent = appGenerator.generateDefaultServiceContent(defaultServiceNamePascalCase, appType);
       const defaultServicePath = path.join(servicesDir, `${defaultServiceNamePascalCase}.service.ts`);
       await fs.writeFile(defaultServicePath, defaultServiceContent);
       ctx.stdout.write(chalk.dim(`Created ${defaultServicePath}`) + '\n');
 
-      const successMsg = `Successfully generated Dawai application '${appName}'!`;
+      let successMsg = `Successfully generated Dawai application '${appName}'`;
+      if (appType !== 'single') {
+        successMsg += ` (Type: ${appType.toUpperCase()})`;
+      }
+      successMsg += '!';
+
       ctx.stdout.write(chalk.green(successMsg) + '\n');
       ctx.stdout.write(chalk.yellow(`To get started:
   cd ${appName}
@@ -300,11 +314,12 @@ export class ${serviceName} {
 `) + '\n');
       return {
         message: successMsg,
-        appDirectory: rootDir
+        appDirectory: rootDir,
+        appType: appType
       };
 
     } catch (error: any) {
-      ctx.stdout.write(chalk.red(`Error generating app '${appName}': ${error.message}\n`));
+      ctx.stdout.write(chalk.red(`Error generating app '${appName}' (Type: ${appType}): ${error.message}\n`));
       // Clean up created directory if error occurred mid-process (optional, basic for now)
       if (await fs.pathExists(rootDir)) {
         // await fs.remove(rootDir); // Be careful with this in a real CLI

@@ -72,9 +72,18 @@ yarn-error.log*
   `.trim() + '\n';
 }
 
-export function generateAppIndexTsContent(defaultServiceNamePascalCase: string): string {
-  // Assuming HttpTransportAdapter might still be in the main package for now,
-  // or adjust if it's confirmed to be @arifwidianto/dawai-http-transport
+export function generateAppIndexTsContent(defaultServiceNamePascalCase: string, appType: 'single' | 'mcp'): string {
+  const mcpServerConfig = appType === 'mcp' ? `
+    mcpServer: {
+      enabled: true,
+      transport: 'stdio', // Default transport for MCP server
+      options: {
+        name: \`${defaultServiceNamePascalCase} MCP Server\`,
+        description: 'A Model Context Protocol server for this application.',
+        version: '1.0.0',
+      },
+    },` : '';
+
   return `
 import { Microservice, MicroserviceOptions, HttpTransportAdapter } from '@arifwidianto/dawai-microservice';
 // If HttpTransportAdapter is in its own package:
@@ -84,17 +93,21 @@ import { ${defaultServiceNamePascalCase} } from './services/${defaultServiceName
 import 'reflect-metadata'; // Ensure metadata reflection is enabled
 
 async function bootstrap() {
-  const microserviceOptions: MicroserviceOptions = {
-    webservice: {
+  const microserviceOptions: MicroserviceOptions = {${mcpServerConfig}
+    webservice: { // Example: enable http by default
       enabled: true,
       options: {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : 8080,
+        // Further HTTP options can be added here
       }
     },
-    stdio: {
+    stdio: { // Example: enable stdio by default for CLI commands within the app
       enabled: true,
       options: {
-        interactive: false,
+        // For an app that might also be an MCP server, interactive might be false for stdio
+        // to let MCP take over stdio if it's the designated transport.
+        // If MCP uses a different transport (e.g. custom TCP), then interactive can be true here.
+        interactive: ${appType === 'mcp' ? 'false' : 'true'}, // Adjust based on typical MCP setup
       }
     }
   };
@@ -107,9 +120,13 @@ async function bootstrap() {
   try {
     await app.bootstrap();
     await app.listen();
-    console.log(\`${defaultServiceNamePascalCase} is running with HTTP and STDIO transports.\`);
-    // Example CLI command to test, assuming the default service has a 'ping' command
-    console.log(\`Try: node dist/src/index.js ping\`);
+    console.log(\`${defaultServiceNamePascalCase} is running.\`);
+    console.log(\`App Type: ${appType}\`);
+    if (appType !== 'mcp') {
+      console.log(\`Try CLI: node dist/src/index.js ping\`);
+    } else {
+      console.log(\`MCP Server mode enabled. Use an MCP client to interact or define specific CLI commands.\`);
+    }
   } catch (error) {
     console.error("Failed to start the application:", error);
     process.exit(1);
@@ -130,19 +147,55 @@ signals.forEach(signal => {
   `.trim() + '\n';
 }
 
-export function generateDefaultServiceContent(defaultServiceNamePascalCase: string): string {
-  // Use the more general anyCaseToPascalCase for the service name itself as it's already Pascal.
-  // For command name from service name, toLowerCase is fine.
-  const commandName = defaultServiceNamePascalCase.toLowerCase() + '_ping';
-  return `
-import { cli, Ctx } from '@arifwidianto/dawai-microservice';
-// import { Body } from '@arifwidianto/dawai-microservice';
-// import { z } from 'zod';
+export function generateDefaultServiceContent(defaultServiceNamePascalCase: string, appType: 'single' | 'mcp'): string {
+  const imports = new Set<string>(['Ctx', 'cli']);
+  if (appType === 'mcp') {
+    imports.add('mcp');
+    imports.add('Body'); // MCP handler likely needs @Body
+  }
 
-// Example schema (optional, remove if not needed for ping)
+  const sortedImports = Array.from(imports).sort();
+  const importStatement = `import { ${sortedImports.join(', ')} } from '@arifwidianto/dawai-microservice';`;
+
+  const mcpSchemaContent = appType === 'mcp' ? `
+const mcpTaskSchema = z.object({
+  taskId: z.string().uuid(),
+  prompt: z.string(),
+  data: z.record(z.any()).optional(),
+});
+
+// Example result schema (optional, for type safety)
+// const mcpResultSchema = z.object({
+//   taskId: z.string().uuid(),
+//   status: z.string(),
+//   output: z.string().optional(),
+//   error: z.string().optional(),
+// });
+` : '';
+
+  const mcpHandlerContent = appType === 'mcp' ? `
+  // Example MCP Handler
+  @mcp({ command: 'generate_text_mcp', schema: mcpTaskSchema })
+  async generateTextMcp(@Body() task: z.infer<typeof mcpTaskSchema>, @Ctx() ctx: any) {
+    ctx.stdout.write(\`[${defaultServiceNamePascalCase} MCP Server] Received task for command 'generate_text_mcp': \${task.taskId}\\n\`);
+    // TODO: Implement text generation logic based on task.prompt and task.data
+    const generatedText = \`Generated text for prompt: "\${task.prompt}" (Task ID: \${task.taskId})\`;
+    ctx.stdout.write(\`[${defaultServiceNamePascalCase} MCP Server] Sending response for: \${task.taskId}\\n\`);
+    return {
+      taskId: task.taskId,
+      status: 'completed',
+      output: generatedText
+    };
+  }
+` : '';
+
+  return `
+${importStatement}
+${appType === 'mcp' ? "import { z } from 'zod';" : "// import { z } from 'zod';"}
+${mcpSchemaContent}
+// Example schema for ping (optional, remove if not needed)
 // const pingSchema = z.object({});
 
-// Service decorator can be added later if needed e.g. @stdio() or @webservice() at class level
 export class ${defaultServiceNamePascalCase} {
   constructor() {
     // console.log('${defaultServiceNamePascalCase} instantiated');
@@ -154,7 +207,7 @@ export class ${defaultServiceNamePascalCase} {
     ctx.stdout.write(message + '\\n');
     return { response: message };
   }
-
+${mcpHandlerContent}
   async onModuleInit() {
     // console.log('${defaultServiceNamePascalCase} initialized');
   }
