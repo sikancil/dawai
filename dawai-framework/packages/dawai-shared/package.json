@@ -1,0 +1,17 @@
+{
+  "name": "dawai-shared",
+  "version": "0.0.1",
+  "description": "Shared library for Dawai framework microservices",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.19",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.3.3"
+  }
+}

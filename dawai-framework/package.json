@@ -1,0 +1,16 @@
+{
+  "name": "dawai-framework-monorepo",
+  "private": true,
+  "devDependencies": {
+    "lerna": "^8.1.2",
+    "typescript": "^5.8.3"
+  },
+  "scripts": {
+    "bootstrap": "lerna bootstrap",
+    "build": "lerna run build",
+    "test": "lerna run test"
+  },
+  "workspaces": [
+    "packages/*"
+  ]
+}
