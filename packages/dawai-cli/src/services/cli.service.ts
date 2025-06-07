@@ -5,7 +5,10 @@ import fs from 'fs-extra';
 import path from 'path';
 import chalk from 'chalk';
 import { toPascalCase, toCamelCase } from '../utils/stringUtils';
-import * as appGenerator from '../generators/app.generator';
+// import * as appGenerator from '../generators/app.generator'; // appGenerator is used by generateAppCmd
+import * as monorepoGen from '../generators/monorepo.generator';
+import * as appGen from '../generators/app.generator'; // Renamed for clarity
+import * as sharedGen from '../generators/shared_package.generator';
 
 // Define Zod schema for the 'generate handler' command arguments
 const generateHandlerSchema = z.object({
@@ -50,6 +53,37 @@ const generateAppSchema = z.object({
     .optional(),
 });
 type GenerateAppOptions = z.infer<typeof generateAppSchema>;
+
+// Define Zod schema for the 'generate monorepo' command arguments
+const generateMonorepoSchema = z.object({
+  monorepoName: z.string()
+    .min(1, { message: "Monorepo name cannot be empty." })
+    .refine(name => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name), {
+      message: "Monorepo name must be a valid kebab-case string (e.g., my-monorepo)."
+    }),
+  services: z.string()
+    .min(1, { message: "At least one service name must be provided for the --services option."})
+    .transform(val =>
+      val.split(',')
+         .map(s => s.trim().toLowerCase())
+         .filter(s => s && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s))
+    ),
+  sharedPackages: z.string()
+    .optional()
+    .transform(val =>
+      val ? val.split(',')
+               .map(s => s.trim().toLowerCase())
+               .filter(s => s && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s))
+          : []
+    ),
+  monorepoManager: z.enum(['npm', 'yarn', 'pnpm', 'lerna'])
+    .default('npm')
+    .optional(),
+}).refine(data => data.services.length > 0, {
+  message: "The --services option must contain at least one valid service name after parsing.",
+  path: ["services"],
+});
+type GenerateMonorepoOptions = z.infer<typeof generateMonorepoSchema>;
 
 const validTransportsWithOptions: Record<string, (handlerName: string, schemaName: string) => string> = {
   cli: (hn, sn) => `@cli({ command: '${hn}', schema: ${sn} })`,
@@ -325,6 +359,127 @@ export class ${serviceName} {
         // await fs.remove(rootDir); // Be careful with this in a real CLI
       }
       throw new Error(`App generation failed: ${error.message}`);
+    }
+  }
+
+  @cli({
+    command: 'generate monorepo',
+    description: 'Generates a new monorepo with multiple Dawai microservices and shared packages.',
+    schema: generateMonorepoSchema
+  })
+  async generateMonorepoCmd(
+    @Body() options: GenerateMonorepoOptions,
+    @Ctx() ctx: any
+  ) {
+    const { monorepoName, services, sharedPackages, monorepoManager } = options;
+    const rootDir = path.resolve(process.cwd(), monorepoName);
+
+    ctx.stdout.write(chalk.blue(`Generating monorepo '${monorepoName}'...\n`));
+
+    try {
+      // 1. Check rootDir existence and create it
+      if (await fs.pathExists(rootDir)) {
+        const errorMsg = `Directory '${rootDir}' already exists. Please remove it or choose a different monorepo name.`;
+        ctx.stdout.write(chalk.red(errorMsg) + '\n');
+        throw new Error(errorMsg);
+      }
+      await fs.mkdir(rootDir);
+      ctx.stdout.write(chalk.dim(`Created monorepo directory: ${rootDir}`) + '\n');
+
+      // 2. Write root monorepo files
+      ctx.stdout.write(chalk.blue('Generating root monorepo files...') + '\n');
+      await fs.writeFile(path.join(rootDir, 'package.json'), monorepoGen.generateMonorepoPackageJsonContent(monorepoName, monorepoManager, services, sharedPackages));
+      await fs.writeFile(path.join(rootDir, 'tsconfig.json'), monorepoGen.generateMonorepoTsConfigJsonContent(services, sharedPackages));
+      await fs.writeFile(path.join(rootDir, 'tsconfig.package.base.json'), monorepoGen.generateTsConfigPackageBaseJsonContent());
+      await fs.writeFile(path.join(rootDir, '.gitignore'), monorepoGen.generateMonorepoGitIgnoreContent());
+      await fs.writeFile(path.join(rootDir, 'README.md'), monorepoGen.generateMonorepoReadmeContent(monorepoName));
+
+      if (monorepoManager === 'lerna') {
+        const npmClient = (options.monorepoManager === 'npm' || options.monorepoManager === 'yarn' || options.monorepoManager === 'pnpm') ? options.monorepoManager : 'npm';
+        await fs.writeFile(path.join(rootDir, 'lerna.json'), monorepoGen.generateLernaJsonContent(monorepoName, npmClient));
+      }
+      if (monorepoManager === 'pnpm') {
+        await fs.writeFile(path.join(rootDir, 'pnpm-workspace.yaml'), monorepoGen.generatePnpmWorkspaceYamlContent());
+      }
+      ctx.stdout.write(chalk.dim('Root files generated.') + '\n');
+
+      // 3. Create packages/ directory
+      const packagesDir = path.join(rootDir, 'packages');
+      await fs.ensureDir(packagesDir);
+
+      // 4. Generate Service Packages
+      if (services && services.length > 0) {
+        ctx.stdout.write(chalk.blue('Generating service packages...') + '\n');
+        for (const serviceNameKebab of services) {
+          const serviceDir = path.join(packagesDir, serviceNameKebab);
+          await fs.ensureDir(serviceDir);
+          const serviceNamePascal = toPascalCase(serviceNameKebab);
+
+          const srcDir = path.join(serviceDir, 'src');
+          const servicesSubDir = path.join(srcDir, 'services');
+          await fs.ensureDir(srcDir);
+          await fs.ensureDir(servicesSubDir);
+
+          await fs.writeFile(path.join(serviceDir, 'package.json'), appGen.generatePackageJsonContent(serviceNameKebab, serviceNamePascal, monorepoName));
+          await fs.writeFile(path.join(serviceDir, 'tsconfig.json'), appGen.generateMonorepoMemberServiceTsConfigJsonContent());
+          await fs.writeFile(path.join(srcDir, 'index.ts'), appGen.generateAppIndexTsContent(serviceNamePascal, 'single'));
+          await fs.writeFile(path.join(servicesSubDir, `${serviceNamePascal}.service.ts`), appGen.generateDefaultServiceContent(serviceNamePascal, 'single'));
+          ctx.stdout.write(chalk.dim(`Generated service package: packages/${serviceNameKebab}`) + '\n');
+        }
+      }
+
+      // 5. Generate Shared Packages
+      if (sharedPackages && sharedPackages.length > 0) {
+        ctx.stdout.write(chalk.blue('Generating shared packages...') + '\n');
+        for (const sharedPkgNameKebab of sharedPackages) {
+          const sharedPkgDir = path.join(packagesDir, sharedPkgNameKebab);
+          await fs.ensureDir(sharedPkgDir);
+          await fs.ensureDir(path.join(sharedPkgDir, 'src'));
+
+          await fs.writeFile(path.join(sharedPkgDir, 'package.json'), sharedGen.generateSharedPackageJsonContent(sharedPkgNameKebab, monorepoName));
+          await fs.writeFile(path.join(sharedPkgDir, 'tsconfig.json'), sharedGen.generateSharedPackageTsConfigJsonContent());
+          await fs.writeFile(path.join(sharedPkgDir, 'src', 'index.ts'), sharedGen.generateSharedPackageIndexTsContent(sharedPkgNameKebab));
+          ctx.stdout.write(chalk.dim(`Generated shared package: packages/${sharedPkgNameKebab}`) + '\n');
+        }
+      }
+
+      // 6. Final success message
+      let bootstrapCommand = "npm install";
+      if (monorepoManager === 'yarn') bootstrapCommand = "yarn install";
+      else if (monorepoManager === 'pnpm') bootstrapCommand = "pnpm install";
+      else if (monorepoManager === 'lerna') {
+        // Lerna might use its own bootstrap or rely on the npmClient's install
+        const lernaJson = JSON.parse(monorepoGen.generateLernaJsonContent(monorepoName, (options.monorepoManager === 'npm' || options.monorepoManager === 'yarn' || options.monorepoManager === 'pnpm') ? options.monorepoManager : 'npm'));
+        if (lernaJson.useWorkspaces) {
+            bootstrapCommand = `${lernaJson.npmClient} install`;
+        } else {
+            bootstrapCommand = "lerna bootstrap";
+        }
+      }
+
+
+      const buildCommand = (monorepoManager === 'lerna' && !JSON.parse(monorepoGen.generateLernaJsonContent(monorepoName, (options.monorepoManager === 'npm' || options.monorepoManager === 'yarn' || options.monorepoManager === 'pnpm') ? options.monorepoManager : 'npm')).useWorkspaces)
+                         ? "lerna run build --stream"
+                         : "npm run build";
+
+
+      const successMsg = `Successfully generated Dawai monorepo '${monorepoName}'!`;
+      ctx.stdout.write(chalk.green(successMsg) + '\n');
+      ctx.stdout.write(chalk.yellow(`To get started:
+  cd ${monorepoName}
+  ${bootstrapCommand}
+  ${buildCommand}
+`) + '\n');
+
+      return { message: successMsg, monorepoDirectory: rootDir };
+
+    } catch (error: any) {
+      ctx.stdout.write(chalk.red(`Error generating monorepo '${monorepoName}': ${error.message}\n`));
+      // Consider more robust cleanup if needed
+      // if (await fs.pathExists(rootDir)) {
+      //   await fs.remove(rootDir);
+      // }
+      throw new Error(`Monorepo generation failed: ${error.message}`);
     }
   }
 }

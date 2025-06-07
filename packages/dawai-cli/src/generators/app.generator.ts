@@ -8,9 +8,10 @@ function kebabToPascalCase(str: string): string {
 }
 
 
-export function generatePackageJsonContent(appNameKebabCase: string): string {
+export function generatePackageJsonContent(appNameKebabCase: string, _defaultServiceNamePascalCase: string, monorepoScope?: string): string {
+  const name = monorepoScope ? `@${monorepoScope}/${appNameKebabCase}` : appNameKebabCase;
   return JSON.stringify({
-    name: appNameKebabCase,
+    name: name,
     version: "0.1.0",
     private: true,
     main: "dist/src/index.js",
@@ -22,10 +23,12 @@ export function generatePackageJsonContent(appNameKebabCase: string): string {
       "test": "echo \"Error: no test specified\" && exit 1"
     },
     dependencies: {
-      "@arifwidianto/dawai-microservice": "0.1.0",
+      "@arifwidianto/dawai-microservice": "0.1.0", // Use actual version later
       "@arifwidianto/dawai-stdio": "0.1.0",
+      // Assuming @arifwidianto/dawai-http-transport is the name for the http adapter package
       "@arifwidianto/dawai-http-transport": "0.1.0",
-      "zod": "^3.22.0"
+      "zod": "^3.22.0",
+      "reflect-metadata": "^0.1.13" // Added reflect-metadata
     },
     devDependencies: {
       "typescript": "^5.0.0",
@@ -37,7 +40,7 @@ export function generatePackageJsonContent(appNameKebabCase: string): string {
   }, null, 2);
 }
 
-export function generateTsConfigJsonContent(): string {
+export function generateTsConfigJsonContent(): string { // This is for a single app, not monorepo member
   return JSON.stringify({
     compilerOptions: {
       target: "ES2022",
@@ -56,6 +59,22 @@ export function generateTsConfigJsonContent(): string {
     exclude: ["node_modules", "dist"]
   }, null, 2);
 }
+
+// New function for tsconfig.json of a service within a monorepo
+export function generateMonorepoMemberServiceTsConfigJsonContent(relativePathToRoot: string = '../../'): string {
+  return JSON.stringify({
+    "extends": `${relativePathToRoot}tsconfig.package.base.json`,
+    "compilerOptions": {
+      "outDir": "./dist",
+      "rootDir": "./src",
+      "tsBuildInfoFile": "./dist/.tsbuildinfo"
+      // Specific overrides for a service package if any, else inherits all from base
+    },
+    "include": ["src/**/*"],
+    "exclude": ["node_modules", "dist", "**/__tests__/**", "**/*.spec.ts"]
+  }, null, 2);
+}
+
 
 export function generateGitIgnoreContent(): string {
   return `
@@ -105,7 +124,9 @@ export function generateAppIndexTsContent(defaultServiceNamePascalCase: string, 
   if (appType === 'mcp' && mcpServerConfig.includes("transport: 'stdio'")) {
     stdioInteractive = false; // MCP server taking over stdio
   } else if (appType === 'a2a') {
-    stdioInteractive = false; // A2A might run as a background agent, CLI for admin
+    // For A2A, stdio might be used for admin CLI commands, so can be interactive.
+    // If A2A itself used stdio for protocol, then false. Assuming admin CLI for now.
+    stdioInteractive = true;
   }
 
 
@@ -149,7 +170,7 @@ async function bootstrap() {
       console.log(\`MCP Server mode enabled. Use an MCP client to interact or define specific CLI commands.\`);
     } else if (appType === 'a2a') {
       console.log(\`A2A Agent mode enabled. Ensure your agent configuration and DIDs are set up.\`);
-      console.log(\`Consider adding specific CLI commands for A2A admin tasks.\`);
+      console.log(\`Consider adding specific CLI commands for A2A admin tasks (e.g., node dist/src/index.js ping).\`);
     }
   } catch (error) {
     console.error("Failed to start the application:", error);
