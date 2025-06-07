@@ -5,6 +5,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import chalk from 'chalk';
 import { toPascalCase, toCamelCase } from '../utils/stringUtils';
+import * as appGenerator from '../generators/app.generator';
 
 // Define Zod schema for the 'generate handler' command arguments
 const generateHandlerSchema = z.object({
@@ -31,6 +32,21 @@ const generateServiceSchema = z.object({
   // Add other potential options like --force, --path later
 });
 type GenerateServiceOptions = z.infer<typeof generateServiceSchema>;
+
+// Define Zod schema for the 'generate app' command arguments
+const generateAppSchema = z.object({
+  appName: z.string()
+    .min(1, { message: "App name cannot be empty." })
+    .refine(name => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(name), {
+      message: "App name must be a valid kebab-case string (e.g., my-app, another-project)."
+    }),
+  defaultServiceName: z.string()
+    .refine(name => /^[A-Z][a-zA-Z0-9_]*$/.test(name), {
+      message: "Default service name must be a valid PascalCase JavaScript class identifier (e.g., MyService, Another_Service)."
+    })
+    .optional(),
+});
+type GenerateAppOptions = z.infer<typeof generateAppSchema>;
 
 const validTransportsWithOptions: Record<string, (handlerName: string, schemaName: string) => string> = {
   cli: (hn, sn) => `@cli({ command: '${hn}', schema: ${sn} })`,
@@ -213,5 +229,87 @@ export class ${serviceName} {
       throw new Error(`File writing failed for ${targetFilePath}: ${error.message}`);
     }
     };
+  }
+
+  @cli({
+    command: 'generate app',
+    description: 'Generates a new minimal Dawai microservice application structure.',
+    schema: generateAppSchema
+  })
+  async generateAppCmd(
+    @Body() options: GenerateAppOptions,
+    @Ctx() ctx: any
+  ) {
+    const { appName } = options; // appName is kebab-case
+    // Ensure toPascalCase from stringUtils handles kebab-case to PascalCase correctly for service name
+    const defaultServiceNamePascalCase = options.defaultServiceName || toPascalCase(appName);
+
+    const rootDir = path.resolve(process.cwd(), appName);
+
+    try {
+      if (await fs.pathExists(rootDir)) {
+        const errorMsg = `Directory '${rootDir}' already exists. Please remove it or choose a different app name.`;
+        ctx.stdout.write(chalk.red(errorMsg) + '\n');
+        throw new Error(errorMsg);
+      }
+      await fs.mkdir(rootDir);
+      ctx.stdout.write(chalk.dim(`Created application directory: ${rootDir}`) + '\n');
+
+      const srcDir = path.join(rootDir, 'src');
+      const servicesDir = path.join(srcDir, 'services');
+      await fs.ensureDir(srcDir);
+      await fs.ensureDir(servicesDir);
+      ctx.stdout.write(chalk.dim(`Created source and services directories.`) + '\n');
+
+      // package.json
+      const packageJsonContent = appGenerator.generatePackageJsonContent(appName);
+      const packageJsonPath = path.join(rootDir, 'package.json');
+      await fs.writeFile(packageJsonPath, packageJsonContent);
+      ctx.stdout.write(chalk.dim(`Created ${packageJsonPath}`) + '\n');
+
+      // tsconfig.json
+      const tsConfigJsonContent = appGenerator.generateTsConfigJsonContent();
+      const tsConfigJsonPath = path.join(rootDir, 'tsconfig.json');
+      await fs.writeFile(tsConfigJsonPath, tsConfigJsonContent);
+      ctx.stdout.write(chalk.dim(`Created ${tsConfigJsonPath}`) + '\n');
+
+      // .gitignore
+      const gitIgnoreContent = appGenerator.generateGitIgnoreContent();
+      const gitIgnorePath = path.join(rootDir, '.gitignore');
+      await fs.writeFile(gitIgnorePath, gitIgnoreContent);
+      ctx.stdout.write(chalk.dim(`Created ${gitIgnorePath}`) + '\n');
+
+      // src/index.ts
+      const appIndexTsContent = appGenerator.generateAppIndexTsContent(defaultServiceNamePascalCase);
+      const appIndexTsPath = path.join(srcDir, 'index.ts');
+      await fs.writeFile(appIndexTsPath, appIndexTsContent);
+      ctx.stdout.write(chalk.dim(`Created ${appIndexTsPath}`) + '\n');
+
+      // src/services/<DefaultServiceName>.service.ts
+      const defaultServiceContent = appGenerator.generateDefaultServiceContent(defaultServiceNamePascalCase);
+      const defaultServicePath = path.join(servicesDir, `${defaultServiceNamePascalCase}.service.ts`);
+      await fs.writeFile(defaultServicePath, defaultServiceContent);
+      ctx.stdout.write(chalk.dim(`Created ${defaultServicePath}`) + '\n');
+
+      const successMsg = `Successfully generated Dawai application '${appName}'!`;
+      ctx.stdout.write(chalk.green(successMsg) + '\n');
+      ctx.stdout.write(chalk.yellow(`To get started:
+  cd ${appName}
+  npm install (or yarn/pnpm)
+  npm run dev
+`) + '\n');
+      return {
+        message: successMsg,
+        appDirectory: rootDir
+      };
+
+    } catch (error: any) {
+      ctx.stdout.write(chalk.red(`Error generating app '${appName}': ${error.message}\n`));
+      // Clean up created directory if error occurred mid-process (optional, basic for now)
+      if (await fs.pathExists(rootDir)) {
+        // await fs.remove(rootDir); // Be careful with this in a real CLI
+      }
+      throw new Error(`App generation failed: ${error.message}`);
+    }
   }
 }
