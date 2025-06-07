@@ -65,7 +65,7 @@ export class HttpTransportAdapter extends TransportAdapter {
   registerHandler(methodName: string, metadata: any, handlerFn: Function, serviceInstance: any): void {
     if (metadata?.crud) {
       const crudOptions = metadata.crud;
-      const httpMethod = crudOptions.method.toLowerCase();
+      const httpMethod: string = String(crudOptions.method).toLowerCase();
 
       let endpointPath = crudOptions.endpoint.startsWith('/') ? crudOptions.endpoint : '/' + crudOptions.endpoint;
       if (endpointPath === '/') endpointPath = '';
@@ -76,10 +76,10 @@ export class HttpTransportAdapter extends TransportAdapter {
       fullPath += endpointPath;
       if (fullPath === '' || fullPath === '/') fullPath = '/';
 
-      if (typeof this.app[httpMethod] === 'function') {
+      if (typeof (this.app as any)[httpMethod] === 'function') {
         console.log(`HttpTransportAdapter: Registering route ${httpMethod.toUpperCase()} ${fullPath} to call ${serviceInstance.constructor.name}.${methodName}`);
 
-        this.app[httpMethod](fullPath, async (req: Request, res: Response, next: NextFunction) => {
+        (this.app as any)[httpMethod](fullPath, async (req: Request, res: Response, next: NextFunction) => {
           try {
             // console.log(`HttpTransportAdapter: Route ${httpMethod.toUpperCase()} ${fullPath} matched. Preparing args for ${serviceInstance.constructor.name}.${methodName}`);
 
