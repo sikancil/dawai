@@ -25,5 +25,4 @@ export * from './decorators/cli.decorator';
 export * from './decorators/use-middleware.decorator';
 export * from './core';
 export * from './transports/http.transport.adapter';
-export * from './transports/stdio.transport.adapter';
 // export * from './parameter.decorators'; // To be uncommented when implemented

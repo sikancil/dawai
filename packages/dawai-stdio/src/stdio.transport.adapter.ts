@@ -1,10 +1,6 @@
-import { TransportAdapter } from '../base/transport.adapter';
-import { StdioOptions } from '../microservice.options';
+import { TransportAdapter, StdioOptions, metadataStorage, ParameterType, DawaiMiddleware, MiddlewareType } from '@arifwidianto/dawai-microservice';
 import * as readline from 'readline';
-import { metadataStorage } from '../decorators/metadata.storage';
-import { ParameterType } from '../decorators/parameter.options';
-import { ZodError, ZodSchema, ZodObject, ZodTypeAny } from 'zod'; // Added ZodObject, ZodTypeAny
-import { DawaiMiddleware, MiddlewareType } from '../core/middleware.interface';
+import { ZodError, ZodSchema, ZodObject, ZodTypeAny } from 'zod';
 
 interface CliCommandDetails {
   methodName: string;
@@ -41,14 +37,13 @@ export class StdioTransportAdapter extends TransportAdapter {
     for (const arg of cliArgs) {
       if (arg === '--help') {
         helpRequested = true;
-        // continue; // No need to store --help in parsedArgs unless explicitly desired
       }
       if (arg.startsWith('--')) {
         const [rawKey, ...valueParts] = arg.substring(2).split('=');
         const value = valueParts.join('=');
         let finalValue: any;
 
-        if (value === 'true' || (rawKey === value && valueParts.length === 0)) finalValue = true; // --key or --key=true
+        if (value === 'true' || (rawKey === value && valueParts.length === 0)) finalValue = true;
         else if (value === 'false') finalValue = false;
         else if (value && !isNaN(Number(value)) && value.trim() !== '' && value.trim() !== '.') finalValue = Number(value);
         else finalValue = valueParts.length > 0 ? value : true;
@@ -66,7 +61,6 @@ export class StdioTransportAdapter extends TransportAdapter {
         positionalArgs.push(arg);
       }
     }
-    // If --help was anywhere, parsedArgs.help will be true if not explicitly set to value
     if (parsedArgs['help'] === true) helpRequested = true;
 
     return { parsedArgs, positionalArgs, helpRequested };
@@ -83,9 +77,8 @@ export class StdioTransportAdapter extends TransportAdapter {
       const shape = (commandDetail.commandOptions.schema as ZodObject<any>).shape;
       for (const key in shape) {
         const fieldSchema = shape[key] as ZodTypeAny;
-        let typeDescription = fieldSchema.description || ''; // Use Zod description if available
+        let typeDescription = fieldSchema.description || '';
         if (!typeDescription) {
-            // Basic type inference for help
             if (fieldSchema._def.typeName === 'ZodString') typeDescription = 'string';
             else if (fieldSchema._def.typeName === 'ZodNumber') typeDescription = 'number';
             else if (fieldSchema._def.typeName === 'ZodBoolean') typeDescription = 'boolean';
@@ -121,15 +114,7 @@ export class StdioTransportAdapter extends TransportAdapter {
       const { serviceInstance, handlerFn, commandOptions: cliOptions, paramMetadatas, methodName: cmdMethodName } = commandDetail;
       const methodMetadata = metadataStorage.getMethodMetadata(serviceInstance.constructor, cmdMethodName);
       const middlewareTypes: MiddlewareType[] | undefined = methodMetadata?.useMiddleware;
-
-      // Note: _parseCliArgs is called before this in listen() for one-shot to check for help
-      // For interactive, it's fine to call it here. Or, pass parsed args into here.
-      // Let's assume parsedArgs are passed in for consistency.
-      // This means _parseCliArgs should be called by the caller.
-      // For now, will keep the original structure where _parseCliArgs is called within _executeCommand if not one-shot help
-      const { parsedArgs, positionalArgs } = this._parseCliArgs(commandArgs); // This is fine for interactive. One-shot handles help before.
-
-
+      const { parsedArgs, positionalArgs } = this._parseCliArgs(commandArgs);
       let inputDataForValidation: any = parsedArgs;
 
       if (cliOptions.schema) {
@@ -140,7 +125,6 @@ export class StdioTransportAdapter extends TransportAdapter {
           for (const field in fieldErrors) {
             console.error(`  ${field}: ${(fieldErrors[field] as string[]).join(', ')}`);
           }
-          // Also print command specific help on validation error
           console.error("\n" + this._generateCommandHelp(commandName, commandDetail));
           return { success: false, error: validationResult.error };
         }
@@ -163,7 +147,29 @@ export class StdioTransportAdapter extends TransportAdapter {
                 }
                 break;
               case ParameterType.CTX:
-                handlerArgs[paramMeta.index] = { command: commandName, rawArgs: commandArgs, parsedArgs: inputDataForValidation, positionalArgs };
+                handlerArgs[paramMeta.index] = {
+                  command: commandName,
+                  rawArgs: commandArgs,
+                  parsedArgs: inputDataForValidation,
+                  positionalArgs,
+                  stdout: process.stdout,
+                  stdin: process.stdin,
+                  clearLine: () => {
+                    if (process.stdout.isTTY) {
+                      process.stdout.clearLine(0);
+                      process.stdout.cursorTo(0);
+                    }
+                  },
+                  writeOverwritable: (message: string) => {
+                    if (process.stdout.isTTY) {
+                      process.stdout.clearLine(0);
+                      process.stdout.cursorTo(0);
+                      process.stdout.write(message);
+                    } else {
+                      process.stdout.write(message + '\n');
+                    }
+                  }
+                };
                 break;
               default:
                 handlerArgs[paramMeta.index] = undefined;
@@ -197,11 +203,10 @@ export class StdioTransportAdapter extends TransportAdapter {
   async listen(): Promise<void> {
     const isInteractiveOption = this.adapterOptions?.interactive === true;
     const isTty = process.stdin.isTTY;
-    const procArgs = process.argv.slice(2); // node script.js cmd [args...]
+    const procArgs = process.argv.slice(2);
     const hasProcessCmd = procArgs.length > 0;
 
     if (isInteractiveOption && isTty) {
-      // --- INTERACTIVE MODE ---
       this.rl = readline.createInterface({
         input: process.stdin,
         output: process.stdout,
@@ -214,7 +219,6 @@ export class StdioTransportAdapter extends TransportAdapter {
         const trimmedLine = line.trim();
         if (trimmedLine) {
           const [commandName, ...commandArgs] = trimmedLine.split(/\s+/);
-
           if (commandName === 'exit' || commandName === 'quit') {
             this.rl?.close(); return;
           }
@@ -235,7 +239,6 @@ export class StdioTransportAdapter extends TransportAdapter {
 
           const commandDetail = this.cliCommands.get(commandName);
           if (commandDetail) {
-            // In interactive, we don't check for --help flag on individual commands, use `help <cmd>`
             const { success, result } = await this._executeCommand(commandName, commandArgs, commandDetail);
             if (success && result !== undefined) {
               console.log(JSON.stringify(result, null, 2));
@@ -251,12 +254,11 @@ export class StdioTransportAdapter extends TransportAdapter {
       });
 
     } else if (hasProcessCmd) {
-      // --- ONE-SHOT MODE ---
       const commandName = procArgs[0];
       const commandArgs = procArgs.slice(1);
-      const { parsedArgs, helpRequested } = this._parseCliArgs(commandArgs); // also get commandArgs for _executeCommand
+      const { parsedArgs, helpRequested } = this._parseCliArgs(commandArgs);
 
-      if (commandName === 'help' && !helpRequested) { // `node script.js help commandname`
+      if (commandName === 'help' && !helpRequested) {
         const helpCmdName = commandArgs[0];
         if (helpCmdName) {
             const commandDetail = this.cliCommands.get(helpCmdName);
@@ -264,31 +266,26 @@ export class StdioTransportAdapter extends TransportAdapter {
                 console.log(this._generateCommandHelp(helpCmdName, commandDetail));
             } else {
                 console.error(`Error: Command '${helpCmdName}' not found for help.`);
-                this._printGeneralHelp(); // Show general help if specific not found
+                this._printGeneralHelp();
             }
-        } else { // `node script.js help`
+        } else {
             this._printGeneralHelp();
         }
         process.exit(0);
       }
 
       const commandDetail = this.cliCommands.get(commandName);
-
       if (!commandDetail) {
         console.error(`Error: Command '${commandName}' not found.`);
         this._printGeneralHelp();
         process.exit(1);
       }
 
-      if (helpRequested) { // Handles `node script.js commandname --help`
+      if (helpRequested) {
         console.log(this._generateCommandHelp(commandName, commandDetail));
         process.exit(0);
       }
 
-      // Pass original commandArgs (unparsed by the initial _parseCliArgs for help check)
-      // to _executeCommand, which will call _parseCliArgs again.
-      // OR, pass parsedArgs directly if _executeCommand is refactored to accept them.
-      // For now, _executeCommand calls _parseCliArgs itself.
       const { success, result } = await this._executeCommand(commandName, commandArgs, commandDetail);
       if (success) {
         if (result !== undefined) {
@@ -297,10 +294,10 @@ export class StdioTransportAdapter extends TransportAdapter {
         }
         process.exit(0);
       } else {
-        process.exit(1); // Error already printed by _executeCommand
+        process.exit(1);
       }
 
-    } else { // --- NEITHER INTERACTIVE NOR VALID ONE-SHOT ---
+    } else {
       if (isInteractiveOption && !isTty) {
         console.warn("StdioTransportAdapter: Interactive mode configured, but not a TTY.");
         console.warn("For one-shot commands: node <script> <command> [args...]");

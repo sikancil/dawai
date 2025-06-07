@@ -10,7 +10,8 @@ import {
   stdio,
   Body,
   Params,
-  Query
+  Query,
+  Ctx // Explicitly adding Ctx for clarity, though './' should cover it
 } from './'; // Assuming decorators are exported from main index
 
 import {
@@ -27,7 +28,8 @@ import {
 
 import { validateServiceDefinition, ValidationSuggestion } from './core'; // Using core export
 import { Microservice } from './core';
-import { HttpTransportAdapter, StdioTransportAdapter } from './transports';
+import { HttpTransportAdapter } from './transports';
+import { StdioTransportAdapter } from '@arifwidianto/dawai-stdio';
 
 
 // --- Zod Schemas ---
@@ -139,6 +141,21 @@ export class EmailService {
   ) {
     console.log('EmailService: Executing RPC command "get_status" with query:', statusQuery);
     return { status: 'RPC Command Executed', currentStatus: 'All systems nominal for ' + statusQuery.taskId };
+  }
+
+  @cli({ command: 'countdown', description: 'A simple countdown timer example.' })
+  async countdown(@Ctx() ctx: any): Promise<void> { // Add type for ctx if available/defined
+    ctx.stdout.write('Starting countdown:\n'); // Use direct stdout
+    for (let i = 5; i >= 0; i--) {
+      ctx.writeOverwritable(`Counting down: ${i}...`);
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    ctx.clearLine(); // Clear the last countdown message
+    ctx.stdout.write('Countdown finished!\n');
+    // Note: If interactive mode is on, the prompt will appear after this.
+    // If one-shot, the app will exit.
   }
 
   helperMethod() {

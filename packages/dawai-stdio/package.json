@@ -1,0 +1,23 @@
+{
+  "name": "@arifwidianto/dawai-stdio",
+  "version": "0.1.0",
+  "description": "STDIO transport adapter for the Dawai microservice framework",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "@arifwidianto/dawai-microservice": "0.1.0"
+  },
+  "peerDependencies": {
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^18.0.0"
+  },
+  "publishConfig": { "access": "public" },
+  "license": "MIT"
+}
