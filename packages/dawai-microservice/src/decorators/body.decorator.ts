@@ -2,7 +2,7 @@ import { metadataStorage } from './metadata.storage';
 import { ParameterType } from './parameter.options';
 
 export function Body(): ParameterDecorator {
-  return (target: Object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+  return (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) => {
     if (propertyKey === undefined) {
       // This case should not happen for parameter decorators on methods,
       // but good to guard. propertyKey is undefined for constructor params.
@@ -10,7 +10,7 @@ export function Body(): ParameterDecorator {
       return;
     }
 
-    const targetConstructor = target.constructor === Function ? target as Function : target.constructor;
+    const targetConstructor = target.constructor === Function ? target as new (...args: any[]) => any : target.constructor;
 
     metadataStorage.addParameterMetadata(
       targetConstructor,

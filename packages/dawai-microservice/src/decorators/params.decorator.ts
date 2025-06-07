@@ -2,7 +2,7 @@ import { metadataStorage } from './metadata.storage';
 import { ParameterType } from './parameter.options';
 
 export function Params(key?: string): ParameterDecorator {
-  return (target: Object, propertyKey: string | symbol | undefined, parameterIndex: number) => {
+  return (target: any, propertyKey: string | symbol | undefined, parameterIndex: number) => {
     if (propertyKey === undefined) {
       console.warn('@Params decorator used on a constructor parameter, which is not supported for method parameter injection.');
       return;
