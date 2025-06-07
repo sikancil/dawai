@@ -1,40 +1,48 @@
 import { TransportAdapter } from '../base/transport.adapter';
 import { metadataStorage } from '../decorators/metadata.storage';
-import { WebserviceDecoratorOptions } from '../decorator.options'; // For potential use
+import { HttpTransportAdapter } from '../transports/http.transport.adapter'; // Import for instanceof check
+import { WebserviceDecoratorOptions } from '../decorator.options'; // For type hint
 
 export class Microservice {
-  private transportAdapters: Map<TransportAdapter, any> = new Map();
+  private transportAdapters: Map<TransportAdapter, any> = new Map(); // Stores options passed during registerTransport
   private serviceInstance: any;
 
   constructor(private serviceClass: { new(...args: any[]): {} }) {
-    // Instantiate the service class to access its methods if needed by handlers later
     this.serviceInstance = new this.serviceClass();
   }
 
-  public registerTransport(adapter: TransportAdapter, options: any): void {
-    this.transportAdapters.set(adapter, options);
+  public registerTransport(adapter: TransportAdapter, options?: any): void { // options made optional
+    this.transportAdapters.set(adapter, options || {}); // Store empty object if no options
   }
 
   public async bootstrap(): Promise<void> {
     const classMeta = metadataStorage.getClassMetadata(this.serviceClass);
     const allMethodMeta = metadataStorage.getAllMethodMetadata(this.serviceClass);
 
-    // console.log('Bootstrapping Microservice...');
-    // console.log('Class Metadata:', classMeta);
-    // console.log('All Method Metadata:', allMethodMeta);
+    console.log('Bootstrapping Microservice for class:', this.serviceClass.name);
+    // console.log('Raw Class Metadata from storage:', classMeta);
+    // console.log('Raw Method Metadata from storage:', allMethodMeta);
 
-    for (const [adapter, adapterOptions] of this.transportAdapters.entries()) {
-      // Potentially merge classMeta transport specific options with adapterOptions
-      // For example, if classMeta has webservice options and adapter is HttpAdapter.
-      // This part needs more sophisticated logic later.
-      // For now, just use the options provided when registering the transport.
-      await adapter.initialize(adapterOptions);
+    for (const [adapter, registeredAdapterOptions] of this.transportAdapters.entries()) {
+      let finalAdapterInitOptions = registeredAdapterOptions;
+
+      if (adapter instanceof HttpTransportAdapter && classMeta?.webservice?.options) {
+        console.log(`HttpTransportAdapter detected. Prioritizing @webservice decorator options for ${this.serviceClass.name}.`);
+        // Merge: decorator options take precedence, then registered options
+        finalAdapterInitOptions = { ...registeredAdapterOptions, ...classMeta.webservice.options };
+      } else if (classMeta?.stdio?.options /* && adapter instanceof StdioAdapter */) {
+        // Example for another potential adapter type
+        // console.log('StdioAdapter detected. Prioritizing @stdio decorator options.');
+        // finalAdapterInitOptions = { ...registeredAdapterOptions, ...classMeta.stdio.options };
+      }
+      // Add more else if blocks for other adapter types and their corresponding decorator metadata keys
+
+      // console.log('Final options for adapter.initialize():', finalAdapterInitOptions);
+      await adapter.initialize(finalAdapterInitOptions);
 
       if (allMethodMeta) {
         for (const [methodName, methodMeta] of allMethodMeta.entries()) {
-          // TODO: Add logic to filter/transform metadata for specific adapter types.
-          // For now, pass raw methodMeta. The adapter's registerHandler will need to understand it.
-          // console.log(`Registering handler for method ${methodName} with adapter...`, methodMeta);
+          // console.log(`Registering handler for method '${methodName}' with adapter...`, methodMeta);
           adapter.registerHandler(methodName, methodMeta);
         }
       }

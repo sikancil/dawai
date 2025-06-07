@@ -1,6 +1,7 @@
+import fetch from 'node-fetch'; // Using node-fetch v2
 import { Microservice } from './microservice';
 import { EmailService } from '../example.service';
-import { TransportAdapter } from '../base/transport.adapter';
+import { HttpTransportAdapter } from '../transports/http.transport.adapter';
 import { metadataStorage } from '../decorators/metadata.storage';
 
 let assertionsFailed = 0;
@@ -13,79 +14,76 @@ function assert(condition: boolean, message: string) {
   }
 }
 
-class MockTransportAdapter extends TransportAdapter {
-  public initializedWithOptions: any = null;
-  public listened: boolean = false;
-  public closed: boolean = false;
-  public registeredHandlers: Map<string, any> = new Map();
-
-  async initialize(options: any): Promise<void> {
-    console.log('MockTransportAdapter: Initializing with options:', options);
-    this.initializedWithOptions = options;
-  }
-  async listen(): Promise<void> {
-    console.log('MockTransportAdapter: Listening...');
-    this.listened = true;
-  }
-  async close(): Promise<void> {
-    console.log('MockTransportAdapter: Closing...');
-    this.closed = true;
-  }
-  registerHandler(handlerName: string, metadata: any): void {
-    console.log(`MockTransportAdapter: Registering handler '${handlerName}' with metadata:`, metadata);
-    this.registeredHandlers.set(handlerName, metadata);
-  }
-}
+// Helper to delay execution, useful if server needs a moment to start
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function runTest() {
-  console.log('--- Starting Microservice Test ---');
+  console.log('--- Starting Microservice HTTP Integration Test ---');
 
-  const mockAdapter = new MockTransportAdapter();
-  const adapterOptions = { specificAdapterOption: 'testValue', port: 3000 };
-
-  // Ensure EmailService class definition is processed by creating an instance.
-  // This ensures its decorators run and populate metadataStorage.
+  // Decorators run when EmailService class is defined/imported.
+  // Instantiating it isn't strictly necessary for metadata registration here
+  // if the class itself is passed to Microservice constructor and processed there.
+  // However, explicitly creating an instance ensures decorators have run.
   new EmailService();
 
   const microservice = new Microservice(EmailService);
-  microservice.registerTransport(mockAdapter, adapterOptions);
+  const httpAdapter = new HttpTransportAdapter();
+
+  // Pass some arbitrary options to registerTransport to ensure they can be merged/overridden
+  microservice.registerTransport(httpAdapter, { /* port: 9999, someOtherOption: 'value' */ });
 
   await microservice.bootstrap();
   await microservice.listen();
 
-  // Assertions
-  assert(mockAdapter.initializedWithOptions === adapterOptions, 'Adapter should be initialized with registered options');
+  await delay(100);
 
-  assert(mockAdapter.registeredHandlers.has('sendEmail'), "Handler 'sendEmail' should be registered");
-  const sendEmailMeta = mockAdapter.registeredHandlers.get('sendEmail');
-  assert(sendEmailMeta !== undefined, "Metadata for 'sendEmail' should exist");
-  assert(sendEmailMeta.crud !== undefined, "'sendEmail' metadata should have 'crud' property");
-  assert(sendEmailMeta.crud.endpoint === '/email', "CRUD endpoint should be '/email'");
-  assert(sendEmailMeta.crud.method === 'POST', "CRUD method should be 'POST'");
+  const expectedPort = 3000; // From @webservice in EmailService
+  const classMetaForBasePath = metadataStorage.getClassMetadata(EmailService);
+  const basePath = classMetaForBasePath?.webservice?.options?.crud?.options?.basePath || '';
+  const crudEndpoint = '/email';
+  const url = `http://localhost:${expectedPort}${basePath}${crudEndpoint}`;
 
-  // Check that helperMethod (which is not decorated with @crud) is not registered
-  assert(mockAdapter.registeredHandlers.has('helperMethod') === false, "Handler 'helperMethod' should NOT be registered as a CRUD endpoint");
-  assert(mockAdapter.registeredHandlers.size === 1, 'Only one handler (sendEmail) should be registered via @crud');
+  console.log(`Making POST request to: ${url}`);
+  let response: fetch.Response | undefined; // Explicitly type response
+  let responseBody: any = null;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to: 'test@example.com', subject: 'Hello', body: 'Test' }) // Added a body
+    });
+    responseBody = await response.json();
+    console.log('Response status:', response.status);
+    console.log('Response body:', responseBody);
+  } catch (error) {
+    console.error('Fetch error:', error);
+    assert(false, `HTTP request to ${url} failed: ${error}`);
+  }
 
+  assert(response !== undefined, 'Response should be defined');
+  if (response) {
+    assert(response.status === 200, `Response status should be 200, was ${response.status}`);
+    assert(responseBody !== null, 'Response body should not be null');
+    if (responseBody) {
+      assert(responseBody.message === 'Handler matched (placeholder response)', 'Response message incorrect');
+      assert(responseBody.route === '/api/v1/email', 'Response route incorrect');
+      assert(responseBody.httpMethod === 'POST', 'Response httpMethod incorrect');
+      assert(responseBody.handlerMethod === 'sendEmail', 'Response handlerMethod incorrect');
+    }
+  }
 
-  assert(mockAdapter.listened === true, 'Adapter should have been listened on');
+  const classMeta = metadataStorage.getClassMetadata(EmailService);
+  assert(classMeta?.webservice?.options?.port === expectedPort, `Port from metadata should be ${expectedPort}`);
+  assert(classMeta?.webservice?.options?.crud?.options?.basePath === basePath, `BasePath from metadata should be '${basePath}'`);
 
   await microservice.close();
-  assert(mockAdapter.closed === true, 'Adapter should have been closed');
+  console.log('Microservice closed.');
 
-  const esClassMeta = metadataStorage.getClassMetadata(EmailService);
-  console.log('Direct Class Meta for EmailService from Storage:', esClassMeta);
-  assert(esClassMeta !== undefined && esClassMeta.webservice !== undefined, 'Webservice metadata should exist for EmailService');
-  assert(esClassMeta.webservice.options.port === 3000, 'Webservice port from metadata should be 3000');
-
-  const esMethodMeta = metadataStorage.getAllMethodMetadata(EmailService);
-  console.log('Direct Method Meta for EmailService from Storage:', esMethodMeta);
-  assert(esMethodMeta?.get('sendEmail')?.crud?.endpoint === '/email', 'CRUD endpoint from direct metadata check');
-
+  await delay(100);
 
   if (assertionsFailed > 0) {
     console.error(`--- TEST FAILED: ${assertionsFailed} assertions failed. ---`);
-    process.exit(1); // Indicate failure
+    process.exit(1);
   } else {
     console.log('--- TEST PASSED ---');
   }

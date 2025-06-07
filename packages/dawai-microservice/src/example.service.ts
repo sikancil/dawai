@@ -4,28 +4,35 @@ import { WebserviceDecoratorOptions, CrudDecoratorOptions } from './decorator.op
 
 const serviceOptions: WebserviceDecoratorOptions = {
   enabled: true,
-  options: { port: 3000 }
+  options: {
+    port: 3000,
+    crud: { // Options for CRUD related settings at the webservice level
+      enabled: true, // Assuming CRUD is enabled for this webservice
+      options: {
+        basePath: '/api/v1' // All @crud endpoints under this service will be prefixed
+      }
+    }
+  }
 };
 
 const sendEmailCrudOptions: CrudDecoratorOptions = {
-  endpoint: '/email',
+  endpoint: '/email', // Will become /api/v1/email
   method: 'POST'
 };
 
 @webservice(serviceOptions)
 export class EmailService {
   constructor() {
-    console.log('EmailService instantiated');
+    // console.log('EmailService instantiated for testing');
   }
 
   @crud(sendEmailCrudOptions)
   sendEmail(to: string, subject: string, body: string) {
-    console.log(`Sending email to ${to} with subject ${subject}`);
-    return { status: 'Email sent', to, subject };
+    // console.log(`EmailService: Sending email to ${to} with subject ${subject}`);
+    return { status: 'Email actually sent by service', to, subject }; // Modified for later tests
   }
 
-  // Another method without CRUD to ensure it's not picked up by mistake
   helperMethod() {
-    console.log('Helper method called');
+    // console.log('Helper method called');
   }
 }
