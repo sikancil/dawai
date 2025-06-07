@@ -2,11 +2,16 @@ import { TransportAdapter } from '../base/transport.adapter';
 import { metadataStorage } from '../decorators/metadata.storage';
 import { HttpTransportAdapter } from '../transports/http.transport.adapter'; // Import for instanceof check
 
+// Define a clearer constructor signature for service classes  
+interface ServiceClass {  
+  new(...args: any[]): any;  
+} 
+
 export class Microservice {
   private transportAdapters: Map<TransportAdapter, any> = new Map();
   private serviceInstance: any;
 
-  constructor(private serviceClass: { new(...args: any[]): {} }) {
+  constructor(private serviceClass: ServiceClass) {
     this.serviceInstance = new this.serviceClass();
   }
 
