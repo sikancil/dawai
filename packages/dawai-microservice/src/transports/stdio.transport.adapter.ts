@@ -58,8 +58,7 @@ export class StdioTransportAdapter extends TransportAdapter {
               const methodMetadata = metadataStorage.getMethodMetadata(serviceInstance.constructor, cmdMethodName);
               const middlewareTypes: MiddlewareType[] | undefined = methodMetadata?.useMiddleware;
 
-              const executeOriginalCliHandler = async () => {
-                // Argument Parsing (moved inside for middleware context)
+              // Argument Parsing
               const parsedArgs: Record<string, any> = {};
               const positionalArgs: string[] = [];
               for (const arg of args) {
@@ -70,33 +69,35 @@ export class StdioTransportAdapter extends TransportAdapter {
                   positionalArgs.push(arg);
                 }
               }
-              // Assign positional args if needed by schema, e.g., parsedArgs._ = positionalArgs;
-              // For now, primary input for schema is parsedArgs from --key=value flags.
-              let inputDataForValidation: any = parsedArgs;
-              if (positionalArgs.length > 0 && Object.keys(parsedArgs).length === 0) {
-                // If only positional args are present, and schema might expect an array or specific object structure
-                // This part might need refinement based on how schemas for positional args are defined
-                // For a simple case, if schema expects an array, and only positionals are given:
-                // inputDataForValidation = positionalArgs;
-                // However, for now, we assume schema primarily targets named args.
-                // If schema expects an object and gets an array, it will likely fail unless schema is `z.array(z.string())` or similar.
-                // If the schema is for an object, and we have positionals, how to map them?
-                // Defaulting to parsedArgs, but can expose positionalArgs via CTX.
-              }
 
-
-              // Zod Schema Validation
-              if (cliOptions.schema) {
-                const validationResult = (cliOptions.schema as ZodSchema<any>).safeParse(inputDataForValidation);
-                if (!validationResult.success) {
-                  console.error(`Invalid arguments for command '${command}':`);
-                  const fieldErrors = validationResult.error.flatten().fieldErrors;
-                  for (const field in fieldErrors) {
-                    console.error(`  ${field}: ${(fieldErrors[field] as string[]).join(', ')}`);
-                  }
-                  this.rl.prompt();
-                  return;
+              const executeOriginalCliHandler = async () => {
+                // Assign positional args if needed by schema, e.g., parsedArgs._ = positionalArgs;
+                // For now, primary input for schema is parsedArgs from --key=value flags.
+                let inputDataForValidation: any = parsedArgs; // Now refers to parsedArgs from outer scope
+                if (positionalArgs.length > 0 && Object.keys(parsedArgs).length === 0) {
+                  // If only positional args are present, and schema might expect an array or specific object structure
+                  // This part might need refinement based on how schemas for positional args are defined
+                  // For a simple case, if schema expects an array, and only positionals are given:
+                  // inputDataForValidation = positionalArgs;
+                  // However, for now, we assume schema primarily targets named args.
+                  // If schema expects an object and gets an array, it will likely fail unless schema is `z.array(z.string())` or similar.
+                  // If the schema is for an object, and we have positionals, how to map them?
+                  // Defaulting to parsedArgs, but can expose positionalArgs via CTX.
                 }
+
+
+                // Zod Schema Validation
+                if (cliOptions.schema) {
+                  const validationResult = (cliOptions.schema as ZodSchema<any>).safeParse(inputDataForValidation);
+                  if (!validationResult.success) {
+                    console.error(`Invalid arguments for command '${command}':`);
+                    const fieldErrors = validationResult.error.flatten().fieldErrors;
+                    for (const field in fieldErrors) {
+                      console.error(`  ${field}: ${(fieldErrors[field] as string[]).join(', ')}`);
+                    }
+                    this.rl.prompt();
+                    return;
+                  }
                   inputDataForValidation = validationResult.data;
                 }
 
@@ -133,13 +134,18 @@ export class StdioTransportAdapter extends TransportAdapter {
               if (middlewareTypes && middlewareTypes.length > 0) {
                 const middlewares = middlewareTypes.map(mw => {
                   if (typeof mw === 'function' && mw.prototype?.use) {
-                     return new (mw as new (...args: any[]) => DawaiMiddleware)();
+                    return new (mw as new (...args: any[]) => DawaiMiddleware)();
                   }
                   return mw as DawaiMiddleware;
                 }).filter(mw => typeof mw.use === 'function');
 
                 // CLI context might evolve, for now it's similar to original handler's CTX
-                const cliContext = { command, rawArgs: args, /* parsedArgs will be set by executeOriginalCliHandler if validation runs */ positionalArgs };
+                const cliContext = {
+                  command,
+                  rawArgs: args,
+                  parsedArgs, // Now available from this scope
+                  positionalArgs // Now available from this scope
+                };
 
                 let chain = executeOriginalCliHandler;
                 for (let i = middlewares.length - 1; i >= 0; i--) {
@@ -160,7 +166,7 @@ export class StdioTransportAdapter extends TransportAdapter {
             this.rl.close();
             return; // Prevent prompt after exit
           }
-           else {
+          else {
             console.log(`Unknown command: ${command}. Type 'exit' or 'quit' to close.`);
           }
         }
