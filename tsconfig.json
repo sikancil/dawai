@@ -17,7 +17,8 @@
   "references": [
     { "path": "./packages/dawai-shared" },
     { "path": "./packages/dawai-microservice" },
-    { "path": "./packages/dawai-stdio" }
+    { "path": "./packages/dawai-stdio" },
+    { "path": "./packages/dawai-cli" }
   ],
   "exclude": ["node_modules", "**/dist"]
 }
