@@ -1,8 +1,9 @@
 {
-  "name": "dawai-shared",
+  "name": "@arifwidianto/dawai-shared",
   "version": "0.0.1",
   "description": "Shared library for Dawai framework microservices",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "test": "jest"
