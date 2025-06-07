@@ -1,19 +1,21 @@
 import { TransportAdapter } from '../base/transport.adapter';
 import { metadataStorage } from '../decorators/metadata.storage';
-// HttpTransportAdapter import is no longer needed for instanceof check here
+import { MicroserviceOptions } from '../microservice.options';
 
-// Define a clearer constructor signature for service classes  
-interface ServiceClass {  
-  new(...args: any[]): any;  
-} 
+// Define a clearer constructor signature for service classes
+interface ServiceClass {
+  new(...args: any[]): any;
+}
 
 export class Microservice {
   // Stores adapter instance against its constructor-passed options
   private transportAdapters: Map<TransportAdapter, any> = new Map();
   private serviceInstance: any;
+  private microserviceConstructorOptions?: MicroserviceOptions;
 
-  constructor(private serviceClass: ServiceClass) {
+  constructor(private serviceClass: ServiceClass, microserviceConstructorOptions?: MicroserviceOptions) {
     this.serviceInstance = new this.serviceClass();
+    this.microserviceConstructorOptions = microserviceConstructorOptions;
   }
 
   public registerTransport(adapter: TransportAdapter, options?: any): void {
@@ -24,48 +26,47 @@ export class Microservice {
     const classMeta = metadataStorage.getClassMetadata(this.serviceClass);
     const allMethodMeta = metadataStorage.getAllMethodMetadata(this.serviceClass);
 
-    // console.log('Bootstrapping Microservice for class:', this.serviceClass.name, 'Class Meta:', classMeta);
-
-    for (const [adapter, registeredAdapterOptions] of this.transportAdapters.entries()) {
+    for (const [adapter, optionsFromRegisterTransport] of this.transportAdapters.entries()) {
       const adapterConstructor = adapter.constructor as any;
       const configKey = adapterConstructor.configKey as string | undefined;
-      let effectiveOptions = registeredAdapterOptions; // Start with options from registerTransport
+      let baseConfig: any;
 
-      // console.log(`Processing adapter: ${adapterConstructor.name}, ConfigKey: ${configKey}, Registered options:`, registeredAdapterOptions);
+      if (configKey && this.microserviceConstructorOptions && (this.microserviceConstructorOptions as any)[configKey] !== undefined) {
+        baseConfig = (this.microserviceConstructorOptions as any)[configKey];
+      } else {
+        baseConfig = optionsFromRegisterTransport;
+      }
 
-      if (configKey && classMeta && classMeta[configKey]) {
-        const decoratorConfig = classMeta[configKey]; // This is e.g. WebserviceDecoratorOptions or StdioDecoratorOptions
+      let effectiveOptions = baseConfig;
+      const decoratorConfig = (configKey && classMeta && classMeta[configKey]) ? classMeta[configKey] : undefined;
 
-        // console.log(`Decorator config found for key '${configKey}':`, decoratorConfig);
-
+      if (decoratorConfig) {
         if (decoratorConfig.enabled === false) {
           console.log(`Transport for ${configKey} disabled by class decorator for ${this.serviceClass.name}. Skipping initialization.`);
-          continue; // Skip initializing and registering handlers for this adapter for this service.
+          continue;
         }
-
-        // Merge options: decoratorConfig overrides registeredAdapterOptions.
-        // The structure of both is { enabled?: boolean, options?: object }
         effectiveOptions = {
-          ...registeredAdapterOptions, // Base
-          ...decoratorConfig,          // Decorator defined values (like 'enabled') override base
-          options: {                   // Deep merge for the 'options' sub-object
-            ...(registeredAdapterOptions?.options || {}),
-            ...(decoratorConfig.options || {})
-          }
+          ...baseConfig,
+          ...decoratorConfig,
+          options: {
+            ...(baseConfig?.options || {}),
+            ...(decoratorConfig.options || {}),
+          },
         };
-        // console.log(`Effective options for ${adapterConstructor.name} after merge:`, effectiveOptions);
       } else {
-        // console.log(`No decorator config for ${configKey} on ${this.serviceClass.name}, or configKey not defined on adapter.`);
-        // If no decorator, check if registeredAdapterOptions itself disables the adapter
-        if (registeredAdapterOptions?.enabled === false) {
-            console.log(`Transport for ${adapterConstructor.name} disabled by registered options for ${this.serviceClass.name}. Skipping initialization.`);
-            continue;
+        // No decorator config, check if baseConfig itself disables the adapter
+        if (baseConfig?.enabled === false) {
+          console.log(`Transport for ${configKey || adapterConstructor.name} disabled by constructor/registered options for ${this.serviceClass.name}. Skipping initialization.`);
+          continue;
         }
       }
 
-      // Initialize the adapter with the determined effective options.
-      // The adapter's initialize method should handle its 'enabled' state internally if further checks are needed.
-      // console.log(`Initializing ${adapterConstructor.name} with options:`, effectiveOptions);
+      // Final check on effectiveOptions before initializing
+      if (effectiveOptions?.enabled === false) {
+        console.log(`Transport for ${configKey || adapterConstructor.name} ultimately disabled for ${this.serviceClass.name}. Skipping initialization.`);
+        continue;
+      }
+
       await adapter.initialize(effectiveOptions);
 
       // Register method handlers with this adapter
