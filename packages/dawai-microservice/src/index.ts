@@ -19,6 +19,8 @@ export * from './decorators/sse.decorator';
 export * from './decorators/ws.decorator';
 export * from './decorators/stdio.decorator';
 export * from './decorators/cli.decorator';
+export * from './core/middleware.interface';
+export * from './decorators/use-middleware.decorator';
 export * from './core/microservice';
 export * from './transports/http.transport.adapter';
 export * from './transports/stdio.transport.adapter';

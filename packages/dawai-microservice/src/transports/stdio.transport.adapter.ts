@@ -4,12 +4,14 @@ import * as readline from 'readline';
 import { metadataStorage } from '../decorators/metadata.storage';
 import { ParameterType } from '../decorators/parameter.options';
 import { ZodError, ZodSchema } from 'zod';
+import { DawaiMiddleware, MiddlewareType } from '../core/middleware.interface'; // Added for middleware
 
 interface CliCommandDetails {
+  methodName: string; // Added to retrieve full method metadata later
   handlerFn: Function;
   serviceInstance: any;
-  commandOptions: any; // From @cli decorator
-  paramMetadatas?: any[];
+  commandOptions: any; // From @cli decorator (contains schema, description, etc.)
+  paramMetadatas?: any[]; // Parameters for the handlerFn itself
 }
 
 export class StdioTransportAdapter extends TransportAdapter {
@@ -52,9 +54,12 @@ export class StdioTransportAdapter extends TransportAdapter {
 
           if (commandDetail) {
             try {
-              const cliOptions = commandDetail.commandOptions;
+              const { serviceInstance, handlerFn, commandOptions: cliOptions, paramMetadatas, methodName: cmdMethodName } = commandDetail;
+              const methodMetadata = metadataStorage.getMethodMetadata(serviceInstance.constructor, cmdMethodName);
+              const middlewareTypes: MiddlewareType[] | undefined = methodMetadata?.useMiddleware;
 
-              // Argument Parsing
+              const executeOriginalCliHandler = async () => {
+                // Argument Parsing (moved inside for middleware context)
               const parsedArgs: Record<string, any> = {};
               const positionalArgs: string[] = [];
               for (const arg of args) {
@@ -92,42 +97,61 @@ export class StdioTransportAdapter extends TransportAdapter {
                   this.rl.prompt();
                   return;
                 }
-                inputDataForValidation = validationResult.data;
-              }
+                  inputDataForValidation = validationResult.data;
+                }
 
-              // Argument Injection
-              const handlerArgs: any[] = [];
-              if (commandDetail.paramMetadatas) {
-                for (const paramMeta of commandDetail.paramMetadatas) {
-                  switch (paramMeta.type) {
-                    case ParameterType.BODY:
-                      handlerArgs[paramMeta.index] = inputDataForValidation;
-                      break;
-                    case ParameterType.PARAMS: // Using PARAMS for specific keys from parsed args
-                      if (paramMeta.key) {
-                        handlerArgs[paramMeta.index] = inputDataForValidation[paramMeta.key];
-                      } else {
-                        // If no key, could pass all parsed args, but BODY is better for that.
+                // Argument Injection
+                const handlerArgs: any[] = [];
+                if (paramMetadatas) {
+                  for (const paramMeta of paramMetadatas) {
+                    switch (paramMeta.type) {
+                      case ParameterType.BODY:
+                        handlerArgs[paramMeta.index] = inputDataForValidation;
+                        break;
+                      case ParameterType.PARAMS:
+                        if (paramMeta.key) {
+                          handlerArgs[paramMeta.index] = inputDataForValidation[paramMeta.key];
+                        } else {
+                          handlerArgs[paramMeta.index] = undefined;
+                        }
+                        break;
+                      case ParameterType.CTX:
+                        handlerArgs[paramMeta.index] = { command, rawArgs: args, parsedArgs: inputDataForValidation, positionalArgs };
+                        break;
+                      default:
                         handlerArgs[paramMeta.index] = undefined;
-                      }
-                      break;
-                    case ParameterType.CTX:
-                      handlerArgs[paramMeta.index] = {
-                        command,
-                        rawArgs: args, // original string array of args
-                        parsedArgs: inputDataForValidation, // object after parsing and validation
-                        positionalArgs
-                      };
-                      break;
-                    default:
-                      handlerArgs[paramMeta.index] = undefined;
+                    }
                   }
                 }
-              }
 
-              const result = await commandDetail.handlerFn(...handlerArgs);
-              if (result !== undefined) {
-                console.log(JSON.stringify(result, null, 2));
+                const result = await handlerFn(...handlerArgs);
+                if (result !== undefined) {
+                  console.log(JSON.stringify(result, null, 2));
+                }
+              };
+
+              if (middlewareTypes && middlewareTypes.length > 0) {
+                const middlewares = middlewareTypes.map(mw => {
+                  if (typeof mw === 'function' && mw.prototype?.use) {
+                     return new (mw as new (...args: any[]) => DawaiMiddleware)();
+                  }
+                  return mw as DawaiMiddleware;
+                }).filter(mw => typeof mw.use === 'function');
+
+                // CLI context might evolve, for now it's similar to original handler's CTX
+                const cliContext = { command, rawArgs: args, /* parsedArgs will be set by executeOriginalCliHandler if validation runs */ positionalArgs };
+
+                let chain = executeOriginalCliHandler;
+                for (let i = middlewares.length - 1; i >= 0; i--) {
+                  const currentMiddleware = middlewares[i];
+                  const nextInChain = chain;
+                  // Middleware for CLI might need a different context structure or access to parsedArgs
+                  // For now, pass a generic context; `nextInChain` will eventually parse/validate args
+                  chain = async () => currentMiddleware.use(cliContext, nextInChain);
+                }
+                await chain();
+              } else {
+                await executeOriginalCliHandler();
               }
             } catch (error) {
               console.error(`Error executing command ${command}:`, error instanceof Error ? error.message : String(error));
@@ -167,13 +191,14 @@ export class StdioTransportAdapter extends TransportAdapter {
         console.log(`StdioTransportAdapter: Registering CLI command '${cliOptions.command}' to ${serviceInstance.constructor.name}.${methodName}`);
         const paramMetadatas = metadataStorage.getParameterMetadata(serviceInstance.constructor, methodName);
         this.cliCommands.set(cliOptions.command, {
-          handlerFn: handlerFn.bind(serviceInstance), // Bind to service instance
+          methodName, // Store methodName
+          handlerFn: handlerFn.bind(serviceInstance),
           serviceInstance,
-          commandOptions: cliOptions,
+          commandOptions: cliOptions, // This is CliDecoratorOptions
           paramMetadatas
         });
       } else {
-        console.warn(`StdioTransportAdapter: CLI command for ${methodName} is missing 'command' option.`);
+        console.warn(`StdioTransportAdapter: CLI command for ${serviceInstance.constructor.name}.${methodName} is missing 'command' option.`);
       }
     }
   }
