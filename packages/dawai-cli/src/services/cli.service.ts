@@ -21,6 +21,17 @@ const generateHandlerSchema = z.object({
 
 type GenerateHandlerOptions = z.infer<typeof generateHandlerSchema>;
 
+// Define Zod schema for the 'generate service' command arguments
+const generateServiceSchema = z.object({
+  serviceName: z.string()
+    .min(1, { message: "Service name cannot be empty." })
+    .refine(name => /^[A-Z][a-zA-Z0-9_]*$/.test(name), {
+      message: "Service name must be a valid PascalCase JavaScript class identifier (e.g., MyService, Another_Service)."
+    }),
+  // Add other potential options like --force, --path later
+});
+type GenerateServiceOptions = z.infer<typeof generateServiceSchema>;
+
 const validTransportsWithOptions: Record<string, (handlerName: string, schemaName: string) => string> = {
   cli: (hn, sn) => `@cli({ command: '${hn}', schema: ${sn} })`,
   crud: (hn, sn) => `@crud({ endpoint: '/${hn.toLowerCase()}', method: 'POST', schema: ${sn} })`,
@@ -130,5 +141,77 @@ export class DawaiCliService {
   async hello(@Ctx() ctx: any) {
     ctx.stdout.write(chalk.blue('Hello from Dawai CLI Service!\n'));
     return { message: "Hello successful!" };
+  }
+
+  @cli({
+    command: 'generate service', // StdioTransportAdapter should handle "generate service" as the command key
+    description: 'Generates a new boilerplate service class file (e.g., MyExampleService).',
+    schema: generateServiceSchema
+  })
+  async generateServiceCmd(
+    @Body() options: GenerateServiceOptions,
+    @Ctx() ctx: any
+  ) {
+    const { serviceName } = options; // serviceName is PascalCase from schema validation
+
+    const generatedCode = `
+// Example imports (uncomment and adjust as needed):
+// import { Body, Ctx, cli, crud, mcp, ws, rpc, a2a, sse, llm, stdio, webservice } from '@arifwidianto/dawai-microservice';
+// import { z } from 'zod';
+
+// Example: Define a simple schema for a handler if you add one
+// const exampleSchema = z.object({
+//   name: z.string(),
+// });
+
+export class ${serviceName} {
+  constructor() {
+    // console.log('${serviceName} instantiated');
+  }
+
+  // TODO: Add your handler methods here.
+  // Each method can be decorated with transport decorators like @cli, @crud, @ws, etc.
+  // Example handler:
+  // @cli({ command: '${serviceName.toLowerCase()}_example', schema: exampleSchema })
+  // async exampleHandler(@Body() body: z.infer<typeof exampleSchema>, @Ctx() ctx: any) {
+  //   ctx.stdout.write(\`Received name: \${body.name} in ${serviceName}\\n\`);
+  //   return { message: \`Hello \${body.name} from ${serviceName}!\` };
+  // }
+
+  /**
+   * Optional lifecycle hook, called after the service and its transport adapters are initialized.
+   */
+  async onModuleInit() {
+    // console.log('${serviceName} has been initialized.');
+  }
+
+  /**
+   * Optional lifecycle hook, called before the application shuts down.
+   */
+  async onApplicationShutdown() {
+    // console.log('${serviceName} is shutting down.');
+  }
+}
+`;
+
+    const targetDir = path.resolve(process.cwd(), 'src', 'services');
+    const targetFileName = `${serviceName}.service.ts`; // serviceName is already PascalCase
+    const targetFilePath = path.join(targetDir, targetFileName);
+
+    try {
+      await fs.ensureDir(targetDir);
+      await fs.writeFile(targetFilePath, generatedCode);
+
+      ctx.stdout.write(chalk.green(`Successfully generated service file at: ${targetFilePath}\n`));
+      return {
+        message: `Service ${serviceName} generated successfully.`,
+        serviceName: serviceName,
+        path: targetFilePath
+      };
+    } catch (error: any) {
+      ctx.stdout.write(chalk.red(`Error writing service file ${targetFilePath}: ${error.message}\n`));
+      throw new Error(`File writing failed for ${targetFilePath}: ${error.message}`);
+    }
+    };
   }
 }
