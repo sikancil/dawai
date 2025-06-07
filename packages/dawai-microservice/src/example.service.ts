@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import chalk from 'chalk'; // Added chalk import
 import {
   webservice,
   crud,
@@ -8,11 +9,12 @@ import {
   ws,
   rpc,
   stdio,
+  sse, // Added sse import
   Body,
   Params,
   Query,
-  Ctx // Explicitly adding Ctx for clarity, though './' should cover it
-} from './'; // Assuming decorators are exported from main index
+  Ctx
+} from './';
 
 import {
   WebserviceDecoratorOptions,
@@ -24,9 +26,9 @@ import {
   RpcDecoratorOptions,
   StdioOptions,
   MicroserviceOptions
-} from './'; // Assuming options are exported from main index
+} from './';
 
-import { validateServiceDefinition, ValidationSuggestion } from './core'; // Using core export
+import { validateServiceDefinition, ValidationSuggestion } from './core';
 import { Microservice } from './core';
 import { HttpTransportAdapter } from './transports';
 import { StdioTransportAdapter } from '@arifwidianto/dawai-stdio';
@@ -46,12 +48,22 @@ const taskSchema = z.object({
   payload: z.record(z.any()).optional(),
 });
 
+const filterOptionsSchema = z.object({ // Example schema for getItemWithBody
+  status: z.string().optional(),
+});
+
+const initialSseSettingsSchema = z.object({ // Example schema for streamUpdatesWithBody
+  clientId: z.string().optional(),
+  filter: z.array(z.string()).optional(),
+});
+
+
 // --- Service Configuration ---
 const serviceOptions: WebserviceDecoratorOptions = {
   enabled: true,
   options: {
     port: 3000,
-    crud: { // Default CRUD settings for @webservice related CRUDs if not overridden
+    crud: {
       enabled: true,
       options: {
         basePath: '/api/v1'
@@ -63,22 +75,22 @@ const serviceOptions: WebserviceDecoratorOptions = {
 const sendEmailCrudOptions: CrudDecoratorOptions = {
   endpoint: '/email/:userId',
   method: 'POST',
-  schema: sendEmailSchema, // Added schema
+  schema: sendEmailSchema,
 };
 
 const microserviceGlobalOptions: MicroserviceOptions = {
-  webservice: serviceOptions, // From constructor
-  stdio: { // For StdioTransportAdapter constructor options
+  webservice: serviceOptions,
+  stdio: {
     enabled: true,
     options: {
-      interactive: false // Example: run in non-interactive mode
+      interactive: false
     }
   }
 };
 
 
-@stdio({ enabled: true, options: { interactive: true } }) // Class decorator for CLI
-@webservice() // Will use constructor options or find defaults if any
+@stdio({ enabled: true, options: { interactive: true } })
+@webservice()
 export class EmailService {
   constructor() {
     // console.log('EmailService instantiated');
@@ -88,7 +100,7 @@ export class EmailService {
   sendEmail(
     @Params('userId') userId: string,
     @Query('sendConfirmation') sendConfirmation: string,
-    @Body() payload: z.infer<typeof sendEmailSchema> // Type inference from Zod
+    @Body() payload: z.infer<typeof sendEmailSchema>
   ) {
     console.log(`EmailService: Invoked sendEmail with userId: ${userId}, sendConfirmation: ${sendConfirmation}, payload:`, payload);
     return {
@@ -109,12 +121,9 @@ export class EmailService {
     return { status: 'MCP Task Processed', taskId: taskData.taskId };
   }
 
-  // Intentionally has a schema and a parameter, but the parameter is not decorated
-  // with @Body, @Query, or @Params. This should trigger the "Schema Defined but Not Actively Injected" warning.
   @a2a({ command: 'notify_user', schema: sendEmailSchema })
   triggerNotification(
-    // @Body() notificationPayload: z.infer<typeof sendEmailSchema>
-    someOtherParam: string = "default" // Parameter exists but doesn't use schema
+    someOtherParam: string = "default"
   ) {
     console.log('EmailService: Triggering A2A Notification. Param `someOtherParam` =', someOtherParam, '. A validation warning for unused schema injection is expected.');
     return { status: 'A2A Notification Triggered (validation warning expected for unused schema injection)' };
@@ -136,36 +145,58 @@ export class EmailService {
     return { status: 'WS Message Handled', event: 'user_update', taskId: updateData.taskId };
   }
 
-  @rpc({ command: 'get_status', schema: taskSchema }) // Assuming taskSchema can be used for a status query context
+  @rpc({ command: 'get_status', schema: taskSchema })
   executeRpcCommand(
-    @Body() statusQuery: z.infer<typeof taskSchema> // Example: using taskId from taskSchema to get status
+    @Body() statusQuery: z.infer<typeof taskSchema>
   ) {
     console.log('EmailService: Executing RPC command "get_status" with query:', statusQuery);
     return { status: 'RPC Command Executed', currentStatus: 'All systems nominal for ' + statusQuery.taskId };
   }
 
   @cli({ command: 'countdown', description: 'A simple countdown timer example.' })
-  async countdown(@Ctx() ctx: any): Promise<void> { // Add type for ctx if available/defined
-    ctx.stdout.write('Starting countdown:\n'); // Use direct stdout
+  async countdown(@Ctx() ctx: any): Promise<void> {
+    ctx.stdout.write('Starting countdown:\n');
     for (let i = 5; i >= 0; i--) {
       ctx.writeOverwritable(`Counting down: ${i}...`);
       if (i > 0) {
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
-    ctx.clearLine(); // Clear the last countdown message
+    ctx.clearLine();
     ctx.stdout.write('Countdown finished!\n');
-    // Note: If interactive mode is on, the prompt will appear after this.
-    // If one-shot, the app will exit.
   }
 
   @mcp({ command: 'process_empty_payload', schema: taskSchema })
-  // This method has a schema but no parameters, which should trigger a validation warning.
   async processEmptyPayload() {
     console.log('EmailService: Attempting to process empty payload. A validation warning for zero parameters is expected.');
-    // In a real scenario, this method might perform an action that doesn't require input,
-    // but having a schema associated via decorator without a way to receive it is questionable.
     return { status: 'Processed empty payload (validation warning expected for zero params)' };
+  }
+
+  // Method to trigger DAWAI-VAL-HTTP001
+  @crud({ endpoint: '/items/:id', method: 'GET', schema: filterOptionsSchema }) // Added schema for completeness, though not strictly needed for the @Body validation
+  async getItemWithBody(
+    @Params('id') id: string,
+    @Body() filterOptions: z.infer<typeof filterOptionsSchema> // Problematic @Body() for GET
+  ) {
+    console.log(`EmailService: getItemWithBody called for ID ${id}. A validation error (DAWAI-VAL-HTTP001) for @Body on GET is expected.`);
+    return { id, data: `Item data for ${id}`, receivedFilter: filterOptions };
+  }
+
+  // Method to trigger DAWAI-VAL-SSE001
+  @sse({ event: 'live-updates', schema: initialSseSettingsSchema }) // Added schema for completeness
+  async streamUpdatesWithBody(
+    @Ctx() ctx: any,
+    @Body() initialSettings: z.infer<typeof initialSseSettingsSchema> // Problematic @Body() for SSE
+  ) {
+    console.log(`EmailService: streamUpdatesWithBody called. A validation warning (DAWAI-VAL-SSE001) for @Body on @sse is expected.`);
+    if (ctx.res && typeof ctx.res.write === 'function') {
+      ctx.res.write(`data: Initial settings received: ${JSON.stringify(initialSettings)}\n\n`);
+      ctx.res.write(`data: Update 1\n\n`);
+      if (typeof ctx.res.end === 'function') ctx.res.end();
+    } else {
+      console.warn("ctx.res.write is not available in this SSE context for testing.");
+    }
+    return { status: "SSE stream initiated with body (warning expected)"};
   }
 
   helperMethod() {
@@ -184,16 +215,36 @@ export class EmailService {
 // --- Validation Demonstration ---
 const suggestions: ValidationSuggestion[] = validateServiceDefinition(EmailService);
 if (suggestions.length > 0) {
-  console.warn('\n[Dawai Validation Suggestions for EmailService]:');
+  console.warn(chalk.bold.underline('\n[Dawai Validation Suggestions for EmailService]:'));
   suggestions.forEach(suggestion => {
-    let msg = `  - ${suggestion.severity.toUpperCase()}: ${suggestion.message}`;
-    if (suggestion.methodName) msg += ` (Method: ${suggestion.methodName})`;
-    if (suggestion.parameterIndex !== undefined) msg += ` (Parameter Index: ${suggestion.parameterIndex})`;
-    console.warn(msg);
+    let msg = `
+[${suggestion.severity.toUpperCase()}] ${suggestion.message}`;
+    if (suggestion.suggestionCode) msg += chalk.gray(` (${suggestion.suggestionCode})`);
+
+    let details = '';
+    if (suggestion.methodName) details += `
+  Method: ${chalk.cyan(suggestion.className + '.' + suggestion.methodName)}`;
+    if (suggestion.parameterIndex !== undefined) details += chalk.magenta(`, Param Index: ${suggestion.parameterIndex}`);
+    if (suggestion.decoratorInvolved) details += `
+  Decorator: ${chalk.yellow(suggestion.decoratorInvolved)}`;
+    if (suggestion.keyInvolved) details += `
+  Key/Property: ${chalk.yellow(suggestion.keyInvolved)}`;
+    if (suggestion.expectedPattern) details += `
+  Expected: ${suggestion.expectedPattern}`;
+    if (suggestion.actualPattern) details += `
+  Actual: ${suggestion.actualPattern}`;
+
+    if (suggestion.severity === 'error') {
+      console.error(chalk.red(msg) + details);
+    } else if (suggestion.severity === 'warning') {
+      console.warn(chalk.yellow(msg) + details);
+    } else {
+      console.info(chalk.blue(msg) + details);
+    }
   });
-  console.warn('');
+  console.log('');
 } else {
-  console.log('\n[Dawai Validation Suggestions for EmailService]: No issues found.\n');
+  console.log(chalk.green.bold('\n[Dawai Validation Suggestions for EmailService]: No issues found!\n'));
 }
 
 // --- Simple Bootstrap Function ---
@@ -202,28 +253,17 @@ async function bootstrapExample() {
 
   const service = new Microservice(EmailService, microserviceGlobalOptions);
 
-  // Transports will be configured using microserviceGlobalOptions primarily
-  service.registerTransport(new HttpTransportAdapter() /* options here would be overridden by constructor options if key matches */);
-  service.registerTransport(new StdioTransportAdapter() /* StdioTransport also uses constructor options */);
-  // Example of registering another transport with explicit options that might not be in constructor options
-  // service.registerTransport(new SomeOtherTransportAdapter(), { customOption: 'value' });
-
+  service.registerTransport(new HttpTransportAdapter());
+  service.registerTransport(new StdioTransportAdapter());
 
   try {
     await service.bootstrap();
     await service.listen();
     console.log('EmailService is running. Press Ctrl+C to stop.');
 
-    // Simulate CLI call for demonstration if stdio is interactive
     if (microserviceGlobalOptions.stdio?.options?.interactive) {
         console.log("\n--- Simulating CLI Interaction ---");
-        const stdioAdapter = Array.from(service['transportAdapters'].keys()).find(a => a instanceof StdioTransportAdapter) as StdioTransportAdapter | undefined;
-        if (stdioAdapter && stdioAdapter['cliInstance']) {
-             console.log("To test CLI: node dist/example.service.js execute_job '{\"taskId\": \"cli-task-123\", \"description\": \"Run from bootstrap\"}'");
-            // Simulating an internal call to a CLI command handler if possible, or just logging instructions.
-            // Direct invocation like this is tricky as it bypasses the argument parsing layer.
-            // For a real test, you'd run the compiled JS with arguments.
-        }
+        // ... (existing simulation log)
     }
 
   } catch (error) {
@@ -231,7 +271,6 @@ async function bootstrapExample() {
     process.exit(1);
   }
 
-  // Graceful shutdown handling (optional but good practice)
   process.on('SIGINT', async () => {
     console.log('\nCaught SIGINT. Shutting down gracefully...');
     await service.close();
@@ -244,7 +283,6 @@ async function bootstrapExample() {
   });
 }
 
-// Only run bootstrap if this file is executed directly
 if (require.main === module) {
   bootstrapExample();
 }
