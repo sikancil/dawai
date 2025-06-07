@@ -50,7 +50,7 @@ export class HttpTransportAdapter extends TransportAdapter {
     this.host = options.host;
     this.basePath = options.crud?.options?.basePath || '';
     this.websocketPath = options.websocket?.path || '/';
-    this.isWebsocketEnabled = !!options.websocket?.enabled; // Check sub-feature enabled status
+    this.isWebsocketEnabled = !!(options.websocket as { path?: string; enabled?: boolean; options?: any })?.enabled; // Check sub-feature enabled status
 
     this.app.use(json());
     this.app.use(urlencoded({ extended: true }));
