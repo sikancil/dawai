@@ -14,9 +14,9 @@
     // },
     "lib": ["ES2022"]
   },
-  "references": [  
-    { "path": "./packages/dawai-shared" },  
-    { "path": "./packages/dawai-microservice" }  
-  ],
+  // "references": [  
+  //   { "path": "./packages/dawai-shared" },  
+  //   { "path": "./packages/dawai-microservice" }  
+  // ],
   "exclude": ["node_modules", "**/dist"]
 }
