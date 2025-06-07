@@ -1,0 +1,32 @@
+{
+  "name": "@arifwidianto/dawai-microservice",
+  "version": "0.1.0",
+  "description": "A microservice built with the Dawai framework",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "nodemon src/index.ts",
+    "test": "jest"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dawai-shared": "0.0.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "node-fetch": "^2.7.0",
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.19",
+    "@types/node-fetch": "^2.6.12",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.3",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.8.3"
+  },
+  "types": "dist/index.d.ts"
+}
