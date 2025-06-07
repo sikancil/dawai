@@ -1,7 +1,11 @@
+import { ParameterDecoratorMetadata, ParameterType } from './parameter.options';
+
 export class MetadataStorage {
   private static instance: MetadataStorage;
   private classMetadata: Map<Function, any> = new Map();
   private methodMetadata: Map<Function, Map<string, any>> = new Map();
+  // New storage for parameter metadata
+  private parameterMetadata: Map<Function, Map<string, ParameterDecoratorMetadata[]>> = new Map();
 
   private constructor() {} // Private constructor for singleton
 
@@ -37,6 +41,45 @@ export class MetadataStorage {
 
   public getAllMethodMetadata(targetConstructor: Function): Map<string, any> | undefined {
     return this.methodMetadata.get(targetConstructor);
+  }
+
+  // New methods for parameter metadata
+  public addParameterMetadata(
+    targetConstructor: Function,
+    methodName: string,
+    parameterIndex: number,
+    type: ParameterType,
+    key?: string
+  ): void {
+    if (!this.parameterMetadata.has(targetConstructor)) {
+      this.parameterMetadata.set(targetConstructor, new Map<string, ParameterDecoratorMetadata[]>());
+    }
+    const methodParamsMap = this.parameterMetadata.get(targetConstructor)!;
+
+    if (!methodParamsMap.has(methodName)) {
+      methodParamsMap.set(methodName, []);
+    }
+    const paramsList = methodParamsMap.get(methodName)!;
+
+    // Remove if metadata for this specific parameter index already exists, then add the new one.
+    // This ensures that if a decorator is somehow applied multiple times (though unusual for params), the last one wins.
+    const existingParamIndex = paramsList.findIndex(p => p.index === parameterIndex);
+    if (existingParamIndex !== -1) {
+      paramsList.splice(existingParamIndex, 1);
+    }
+    paramsList.push({ index: parameterIndex, type, key });
+  }
+
+  public getParameterMetadata(targetConstructor: Function, methodName: string): ParameterDecoratorMetadata[] | undefined {
+    const methodParamsMap = this.parameterMetadata.get(targetConstructor);
+    if (methodParamsMap) {
+      const paramsList = methodParamsMap.get(methodName);
+      if (paramsList) {
+        // Return a sorted copy to ensure order without modifying the original stored array
+        return [...paramsList].sort((a, b) => a.index - b.index);
+      }
+    }
+    return undefined;
   }
 }
 

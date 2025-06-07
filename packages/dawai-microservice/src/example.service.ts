@@ -1,35 +1,50 @@
 import { webservice } from './decorators/webservice.decorator';
 import { crud } from './decorators/crud.decorator';
 import { WebserviceDecoratorOptions, CrudDecoratorOptions } from './decorator.options';
+import { Body } from './decorators/body.decorator';
+import { Params } from './decorators/params.decorator';
+import { Query } from './decorators/query.decorator';
 
 const serviceOptions: WebserviceDecoratorOptions = {
   enabled: true,
   options: {
     port: 3000,
-    crud: { // Options for CRUD related settings at the webservice level
-      enabled: true, // Assuming CRUD is enabled for this webservice
+    crud: {
+      enabled: true,
       options: {
-        basePath: '/api/v1' // All @crud endpoints under this service will be prefixed
+        basePath: '/api/v1'
       }
     }
   }
 };
 
+// Updated CRUD options to include a path parameter
 const sendEmailCrudOptions: CrudDecoratorOptions = {
-  endpoint: '/email', // Will become /api/v1/email
+  endpoint: '/email/:userId', // Path parameter :userId
   method: 'POST'
 };
 
 @webservice(serviceOptions)
 export class EmailService {
   constructor() {
-    // console.log('EmailService instantiated for testing');
+    // console.log('EmailService instantiated for testing with params');
   }
 
   @crud(sendEmailCrudOptions)
-  sendEmail(to: string, subject: string, body: string) {
-    // console.log(`EmailService: Sending email to ${to} with subject ${subject}`);
-    return { status: 'Email actually sent by service', to, subject }; // Modified for later tests
+  sendEmail(
+    @Params('userId') userId: string,
+    @Query('sendConfirmation') sendConfirmation: string, // query params are strings by default from Express
+    @Body() payload: { to: string; subject: string; bodyContent: string }
+  ) {
+    // console.log(`EmailService: Invoked sendEmail with userId: ${userId}, sendConfirmation: ${sendConfirmation}, payload:`, payload);
+    return {
+      status: 'Email processed by service',
+      userIdReceived: userId,
+      confirmationRequested: sendConfirmation === 'true', // Convert string "true" to boolean
+      toAddress: payload?.to,
+      emailSubject: payload?.subject,
+      bodyReceived: payload?.bodyContent
+    };
   }
 
   helperMethod() {

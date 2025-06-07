@@ -4,6 +4,8 @@ import * as http from 'http';
 import cors from 'cors';
 import { TransportAdapter } from '../base/transport.adapter';
 import { WebserviceOptions as FullWebserviceOptions } from '../microservice.options';
+import { metadataStorage } from '../decorators/metadata.storage'; // Import MetadataStorage
+import { ParameterType } from '../decorators/parameter.options'; // Import ParameterType
 
 type HttpServerOptions = FullWebserviceOptions['options'];
 
@@ -30,7 +32,6 @@ export class HttpTransportAdapter extends TransportAdapter {
     if (options.cors?.enabled) {
       this.app.use(options.cors.options ? cors(options.cors.options) : cors());
     }
-    // console.log('HttpTransportAdapter: Initialized with options:', options);
   }
 
   async listen(): Promise<void> {
@@ -40,11 +41,9 @@ export class HttpTransportAdapter extends TransportAdapter {
       }
       const listenHost = this.host || '0.0.0.0';
       this.server = this.app.listen(this.port, listenHost, () => {
-        // console.log(`HttpTransportAdapter: Server listening on ${listenHost}:${this.port}`);
         resolve();
       });
       this.server.on('error', (err) => {
-        // console.error('HttpTransportAdapter: Server failed to start:', err);
         reject(err);
       });
     });
@@ -54,11 +53,7 @@ export class HttpTransportAdapter extends TransportAdapter {
     return new Promise((resolve, reject) => {
       if (this.server) {
         this.server.close((err) => {
-          if (err) {
-            // console.error('HttpTransportAdapter: Error closing server:', err);
-            return reject(err);
-          }
-          // console.log('HttpTransportAdapter: Server closed.');
+          if (err) return reject(err);
           resolve();
         });
       } else {
@@ -70,7 +65,7 @@ export class HttpTransportAdapter extends TransportAdapter {
   registerHandler(methodName: string, metadata: any, handlerFn: Function, serviceInstance: any): void {
     if (metadata?.crud) {
       const crudOptions = metadata.crud;
-      const httpMethod: string = String(crudOptions.method).toLowerCase();
+      const httpMethod = crudOptions.method.toLowerCase();
 
       let endpointPath = crudOptions.endpoint.startsWith('/') ? crudOptions.endpoint : '/' + crudOptions.endpoint;
       if (endpointPath === '/') endpointPath = '';
@@ -81,18 +76,47 @@ export class HttpTransportAdapter extends TransportAdapter {
       fullPath += endpointPath;
       if (fullPath === '' || fullPath === '/') fullPath = '/';
 
-      if (typeof (this.app as any)[httpMethod] === 'function') {
+      if (typeof this.app[httpMethod] === 'function') {
         console.log(`HttpTransportAdapter: Registering route ${httpMethod.toUpperCase()} ${fullPath} to call ${serviceInstance.constructor.name}.${methodName}`);
 
-        (this.app as any)[httpMethod](fullPath, async (req: Request, res: Response, next: NextFunction) => {
+        this.app[httpMethod](fullPath, async (req: Request, res: Response, next: NextFunction) => {
           try {
-            // console.log(`HttpTransportAdapter: Route ${httpMethod.toUpperCase()} ${fullPath} matched. Calling ${serviceInstance.constructor.name}.${methodName}`);
-            // For now, call without arguments. Parameter injection is for a later step.
-            const result = await handlerFn(); // handlerFn is the bound service method
+            // console.log(`HttpTransportAdapter: Route ${httpMethod.toUpperCase()} ${fullPath} matched. Preparing args for ${serviceInstance.constructor.name}.${methodName}`);
 
-            // console.log(`Result from ${serviceInstance.constructor.name}.${methodName}: `, result);
+            const paramMetadatas = metadataStorage.getParameterMetadata(serviceInstance.constructor, methodName);
+            const args: any[] = [];
+
+            if (paramMetadatas) {
+              // console.log('Found parameter metadata:', paramMetadatas);
+              for (const paramMeta of paramMetadatas) {
+                switch (paramMeta.type) {
+                  case ParameterType.BODY:
+                    args[paramMeta.index] = req.body;
+                    // console.log(`Arg[${paramMeta.index}] (BODY): `, req.body);
+                    break;
+                  case ParameterType.PARAMS:
+                    args[paramMeta.index] = paramMeta.key ? req.params[paramMeta.key] : req.params;
+                    // console.log(`Arg[${paramMeta.index}] (PARAMS${paramMeta.key ? '['+paramMeta.key+']' : ''}): `, args[paramMeta.index]);
+                    break;
+                  case ParameterType.QUERY:
+                    args[paramMeta.index] = paramMeta.key ? req.query[paramMeta.key] : req.query;
+                    // console.log(`Arg[${paramMeta.index}] (QUERY${paramMeta.key ? '['+paramMeta.key+']' : ''}): `, args[paramMeta.index]);
+                    break;
+                  // TODO: Handle other ParameterTypes (HEADERS, CTX, REQ, RES etc.)
+                  default:
+                    // console.log(`Arg[${paramMeta.index}] (Unhandled type ${paramMeta.type}): undefined`);
+                    args[paramMeta.index] = undefined;
+                }
+              }
+            } else {
+              // console.log('No parameter metadata found for this method.');
+            }
+
+            // console.log('Constructed arguments:', args);
+            const result = await handlerFn(...args); // Call with constructed arguments
+
             if (res.headersSent) {
-              console.warn(`HttpTransportAdapter: Headers already sent for route ${fullPath}, cannot send result.`);
+              // console.warn(`HttpTransportAdapter: Headers already sent for route ${fullPath}, cannot send result.`);
               return;
             }
             res.json(result);
@@ -104,7 +128,6 @@ export class HttpTransportAdapter extends TransportAdapter {
                 error: error instanceof Error ? error.message : String(error)
               });
             } else {
-              // If headers already sent, pass to Express default error handler
               next(error);
             }
           }
