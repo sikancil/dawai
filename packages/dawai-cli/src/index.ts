@@ -1,68 +1,86 @@
-import minimist from 'minimist';
+import { Microservice, MicroserviceOptions } from '@arifwidianto/dawai-microservice';
+import { StdioTransportAdapter } from '@arifwidianto/dawai-stdio';
+import { DawaiCliService } from './services/cli.service';
 import chalk from 'chalk';
-import { handleGenerateHandlerCommand } from './commands/generateHandler';
 
 async function main() {
-  const args = minimist(process.argv.slice(2));
-  const command = args._[0];
-  const subCommand = args._[1];
+  // Optional: A top-level welcome message for the CLI tool itself
+  // console.log(chalk.bold.magenta('Dawai CLI'));
 
-  // console.log('Parsed args:', args);
+  const microserviceOptions: MicroserviceOptions = {
+    stdio: {
+      enabled: true,
+      options: {
+        // Let StdioTransportAdapter decide interactive vs one-shot based on TTY and args.
+        // interactive: undefined will allow StdioTransportAdapter's logic to prevail:
+        // - If (interactive:true in options AND TTY) -> interactive
+        // - Else if (process.argv.length > 2) -> one-shot
+        // - Else (fallback with help message)
+        // This is usually the desired behavior for a CLI.
+        interactive: undefined, // Default behavior: one-shot if command args, interactive if TTY and no args.
+        prompt: 'dawai-cli> ' // Optional: Custom prompt for interactive mode
+      }
+    }
+  };
 
-  if (command === 'generate' && subCommand === 'handler') {
-    const handlerName = args._[2];
-    const transportsOption = args.transports || args.t; // Allow --transports or -t
+  const cliApp = new Microservice(DawaiCliService, microserviceOptions);
 
-    if (!handlerName) {
-      console.error(chalk.red('Error: Handler name is required.'));
-      console.log(chalk.yellow('Usage: dawai generate handler <HandlerName> --transports=<cli,ws,...>'));
-      process.exit(1);
+  // Register the StdioTransportAdapter.
+  // The options passed here during registerTransport would be overridden by
+  // microserviceOptions.stdio if microserviceOptions were passed to the adapter's constructor directly,
+  // or if the adapter internally uses the configKey 'stdio' to fetch from MicroserviceOptions.
+  // Since StdioTransportAdapter is initialized with options from Microservice's bootstrap method based on configKey,
+  // the options in microserviceOptions will take precedence.
+  cliApp.registerTransport(new StdioTransportAdapter());
+
+  try {
+    await cliApp.bootstrap(); // Initializes adapters with config from microserviceOptions
+    await cliApp.listen();   // Starts StdioTransportAdapter (handles argv or interactive)
+  } catch (error) {
+    // StdioTransportAdapter's _executeCommand and listen methods are designed
+    // to handle command-specific errors and set process.exit(1) for command failures.
+    // This top-level catch is for more fundamental errors (e.g., bootstrap issues,
+    // or if listen() itself throws an unexpected error not caught by its internal logic).
+
+    // Avoid re-logging errors already handled and exited by StdioTransportAdapter
+    // (like "Unknown command" or "No command provided").
+    // StdioTransportAdapter should ideally manage its own process.exit calls for those.
+    // If an error reaches here, it's likely an unhandled one.
+    if (error instanceof Error) {
+        // Check if it's a known error message from Stdio that we might not want to double-log.
+        // This is a bit fragile. Better if StdioTransportAdapter ensures it exits.
+        const isStdioHandledError = error.message.includes('Unknown command:') ||
+                                    error.message.includes('No command provided');
+        if (!isStdioHandledError) {
+            console.error(chalk.red('An unexpected error occurred during CLI execution:'), error.message);
+            if (error.stack) {
+                // console.error(chalk.gray(error.stack)); // Optional: for more details
+            }
+        }
+    } else if (error) {
+        console.error(chalk.red('An unexpected and untyped error occurred:'), error);
     }
 
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(handlerName)) {
-      console.error(chalk.red('Error: Invalid handler name. Must be a valid JavaScript identifier.'));
-      process.exit(1);
+    // If process.exitCode has not been set by a more specific error handler (like in StdioTransportAdapter)
+    if (process.exitCode === undefined || process.exitCode === 0) {
+         process.exitCode = 1;
     }
-
-    if (!transportsOption) {
-      console.error(chalk.red('Error: --transports option is required.'));
-      console.log(chalk.yellow('Example: --transports=cli,ws,crud'));
-      process.exit(1);
-    }
-
-    const transports = String(transportsOption).split(',').map(t => t.trim()).filter(t => t);
-    if (transports.length === 0) {
-      console.error(chalk.red('Error: At least one transport must be specified.'));
-      process.exit(1);
-    }
-
-    try {
-      await handleGenerateHandlerCommand({ handlerName, transports });
-      // Success message is now printed by handleGenerateHandlerCommand
-    } catch (genError) {
-      // Error message is also printed by handleGenerateHandlerCommand as it throws.
-      // The main catch block below will handle process.exit(1)
-      // console.error(chalk.red('Handler generation failed.')); // This would be redundant
-      process.exitCode = 1; // Ensure exit code is set if error is handled before main catch
-    }
-
-  } else if (command) {
-    console.error(chalk.red(`Unknown command: ${command}`));
-    console.log(chalk.yellow('Available commands: generate handler')); // TODO: Add more or a help command
-    process.exit(1);
-  } else {
-    // No command, print general help or info
-    console.log(chalk.bold.blue('Dawai Framework CLI'));
-    console.log('Usage: dawai <command> [options]');
-    console.log('\nAvailable commands:');
-    console.log(chalk.cyan('  generate handler <HandlerName> --transports=<transportList>'));
-    console.log('    Generates a new handler boilerplate.');
-    console.log(chalk.yellow('\nExample: dawai generate handler sendEmail --transports=cli,crud,ws'));
-    // TODO: Add a proper help command or integrate with a command framework later
   }
 }
 
 main().catch(error => {
-  console.error(chalk.red('An unexpected error occurred:'), error);
-  process.exit(1);
+  // This catch is a final global fallback.
+  // Errors from async main() if not caught inside main's try/catch, or if main itself is misconfigured.
+  console.error(chalk.red('CLI Global Error Handler:'), error);
+  if (process.exitCode === undefined || process.exitCode === 0) {
+      process.exitCode = 1;
+  }
+});
+
+// Ensure the process exits if an exit code has been set.
+// This handles cases where an error occurs, process.exitCode is set, but the event loop is still pending.
+process.on('beforeExit', (code) => {
+  if (process.exitCode !== undefined && process.exitCode !== 0) {
+    process.exit(process.exitCode);
+  }
 });
