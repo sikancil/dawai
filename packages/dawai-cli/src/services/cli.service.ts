@@ -45,7 +45,7 @@ const generateAppSchema = z.object({
       message: "Default service name must be a valid PascalCase JavaScript class identifier (e.g., MyService, Another_Service)."
     })
     .optional(),
-  type: z.enum(['single', 'mcp'])
+  type: z.enum(['single', 'mcp', 'a2a']) // Updated enum
     .default('single')
     .optional(),
 });

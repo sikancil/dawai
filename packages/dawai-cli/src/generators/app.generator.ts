@@ -72,17 +72,42 @@ yarn-error.log*
   `.trim() + '\n';
 }
 
-export function generateAppIndexTsContent(defaultServiceNamePascalCase: string, appType: 'single' | 'mcp'): string {
+export function generateAppIndexTsContent(defaultServiceNamePascalCase: string, appType: 'single' | 'mcp' | 'a2a'): string {
   const mcpServerConfig = appType === 'mcp' ? `
     mcpServer: {
       enabled: true,
-      transport: 'stdio', // Default transport for MCP server
+      transport: 'stdio',
       options: {
         name: \`${defaultServiceNamePascalCase} MCP Server\`,
         description: 'A Model Context Protocol server for this application.',
         version: '1.0.0',
       },
     },` : '';
+
+  const a2aAgentConfig = appType === 'a2a' ? `
+    a2aAgent: {
+      enabled: true,
+      transport: 'http', // Default transport for A2A agent
+      options: {
+        metadata: {
+          name: \`${defaultServiceNamePascalCase} A2A Agent\`,
+          description: 'An Agent-to-Agent communication endpoint for this application.',
+          version: '1.0.0',
+          // Developer would add more specific DID/endpoint metadata here
+        },
+        // Other A2A specific options could be added here
+        // Example: endpointUrl: process.env.A2A_ENDPOINT_URL || 'http://localhost:8081/a2a',
+      },
+    },` : '';
+
+  // Determine stdio interactive mode based on appType
+  let stdioInteractive = true;
+  if (appType === 'mcp' && mcpServerConfig.includes("transport: 'stdio'")) {
+    stdioInteractive = false; // MCP server taking over stdio
+  } else if (appType === 'a2a') {
+    stdioInteractive = false; // A2A might run as a background agent, CLI for admin
+  }
+
 
   return `
 import { Microservice, MicroserviceOptions, HttpTransportAdapter } from '@arifwidianto/dawai-microservice';
@@ -93,21 +118,17 @@ import { ${defaultServiceNamePascalCase} } from './services/${defaultServiceName
 import 'reflect-metadata'; // Ensure metadata reflection is enabled
 
 async function bootstrap() {
-  const microserviceOptions: MicroserviceOptions = {${mcpServerConfig}
-    webservice: { // Example: enable http by default
+  const microserviceOptions: MicroserviceOptions = {${mcpServerConfig}${a2aAgentConfig}
+    webservice: {
       enabled: true,
       options: {
         port: process.env.PORT ? parseInt(process.env.PORT, 10) : 8080,
-        // Further HTTP options can be added here
       }
     },
-    stdio: { // Example: enable stdio by default for CLI commands within the app
+    stdio: {
       enabled: true,
       options: {
-        // For an app that might also be an MCP server, interactive might be false for stdio
-        // to let MCP take over stdio if it's the designated transport.
-        // If MCP uses a different transport (e.g. custom TCP), then interactive can be true here.
-        interactive: ${appType === 'mcp' ? 'false' : 'true'}, // Adjust based on typical MCP setup
+        interactive: ${stdioInteractive},
       }
     }
   };
@@ -121,11 +142,14 @@ async function bootstrap() {
     await app.bootstrap();
     await app.listen();
     console.log(\`${defaultServiceNamePascalCase} is running.\`);
-    console.log(\`App Type: ${appType}\`);
-    if (appType !== 'mcp') {
+    console.log(\`App Type: ${appType.toUpperCase()}\`);
+    if (appType === 'single') {
       console.log(\`Try CLI: node dist/src/index.js ping\`);
-    } else {
+    } else if (appType === 'mcp') {
       console.log(\`MCP Server mode enabled. Use an MCP client to interact or define specific CLI commands.\`);
+    } else if (appType === 'a2a') {
+      console.log(\`A2A Agent mode enabled. Ensure your agent configuration and DIDs are set up.\`);
+      console.log(\`Consider adding specific CLI commands for A2A admin tasks.\`);
     }
   } catch (error) {
     console.error("Failed to start the application:", error);
@@ -147,15 +171,24 @@ signals.forEach(signal => {
   `.trim() + '\n';
 }
 
-export function generateDefaultServiceContent(defaultServiceNamePascalCase: string, appType: 'single' | 'mcp'): string {
+export function generateDefaultServiceContent(defaultServiceNamePascalCase: string, appType: 'single' | 'mcp' | 'a2a'): string {
   const imports = new Set<string>(['Ctx', 'cli']);
+  let needsZodImport = false;
+
   if (appType === 'mcp') {
     imports.add('mcp');
-    imports.add('Body'); // MCP handler likely needs @Body
+    imports.add('Body');
+    needsZodImport = true;
+  }
+  if (appType === 'a2a') {
+    imports.add('a2a');
+    imports.add('Body');
+    needsZodImport = true;
   }
 
   const sortedImports = Array.from(imports).sort();
   const importStatement = `import { ${sortedImports.join(', ')} } from '@arifwidianto/dawai-microservice';`;
+  const zodImportStatement = needsZodImport ? "import { z } from 'zod';" : "// import { z } from 'zod';";
 
   const mcpSchemaContent = appType === 'mcp' ? `
 const mcpTaskSchema = z.object({
@@ -163,14 +196,6 @@ const mcpTaskSchema = z.object({
   prompt: z.string(),
   data: z.record(z.any()).optional(),
 });
-
-// Example result schema (optional, for type safety)
-// const mcpResultSchema = z.object({
-//   taskId: z.string().uuid(),
-//   status: z.string(),
-//   output: z.string().optional(),
-//   error: z.string().optional(),
-// });
 ` : '';
 
   const mcpHandlerContent = appType === 'mcp' ? `
@@ -189,10 +214,37 @@ const mcpTaskSchema = z.object({
   }
 ` : '';
 
+  const a2aSchemaContent = appType === 'a2a' ? `
+const a2aRelayMessageSchema = z.object({
+  messageId: z.string().uuid(),
+  type: z.string(), // Example: 'https://didcomm.org/basicmessage/2.0/message'
+  to: z.string(),    // Target DID
+  from: z.string().optional(), // Sender DID
+  body: z.record(z.any()), // Flexible body content
+  created_time: z.number().optional(),
+  expires_time: z.number().optional(),
+});
+` : '';
+
+  const a2aHandlerContent = appType === 'a2a' ? `
+  // Example A2A Handler
+  @a2a({ command: 'process_a2a_relay', schema: a2aRelayMessageSchema })
+  async processA2aRelay(@Body() message: z.infer<typeof a2aRelayMessageSchema>, @Ctx() ctx: any) {
+    ctx.stdout.write(\`[${defaultServiceNamePascalCase} A2A Agent] Received A2A message '\${message.type}' (ID: \${message.messageId}) for DID: \${message.to}\\n\`);
+    // TODO: Implement A2A message processing logic
+    // This might involve routing to other internal services, cryptographic operations, etc.
+    return {
+      messageId: message.messageId,
+      status: 'processed',
+      note: 'Forwarded or handled by ${defaultServiceNamePascalCase}'
+    };
+  }
+` : '';
+
   return `
 ${importStatement}
-${appType === 'mcp' ? "import { z } from 'zod';" : "// import { z } from 'zod';"}
-${mcpSchemaContent}
+${zodImportStatement}
+${mcpSchemaContent}${a2aSchemaContent}
 // Example schema for ping (optional, remove if not needed)
 // const pingSchema = z.object({});
 
@@ -207,7 +259,7 @@ export class ${defaultServiceNamePascalCase} {
     ctx.stdout.write(message + '\\n');
     return { response: message };
   }
-${mcpHandlerContent}
+${mcpHandlerContent}${a2aHandlerContent}
   async onModuleInit() {
     // console.log('${defaultServiceNamePascalCase} initialized');
   }
