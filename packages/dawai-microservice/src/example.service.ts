@@ -109,14 +109,15 @@ export class EmailService {
     return { status: 'MCP Task Processed', taskId: taskData.taskId };
   }
 
-  // Intentionally missing @Body() to trigger validation
+  // Intentionally has a schema and a parameter, but the parameter is not decorated
+  // with @Body, @Query, or @Params. This should trigger the "Schema Defined but Not Actively Injected" warning.
   @a2a({ command: 'notify_user', schema: sendEmailSchema })
   triggerNotification(
     // @Body() notificationPayload: z.infer<typeof sendEmailSchema>
-    someOtherParam: string = "default" // Added to make it a valid method for TS
+    someOtherParam: string = "default" // Parameter exists but doesn't use schema
   ) {
-    console.log('EmailService: Triggering A2A Notification. This method has a schema but no @Body, a validation warning is expected.', someOtherParam);
-    return { status: 'A2A Notification Triggered (validation warning expected)' };
+    console.log('EmailService: Triggering A2A Notification. Param `someOtherParam` =', someOtherParam, '. A validation warning for unused schema injection is expected.');
+    return { status: 'A2A Notification Triggered (validation warning expected for unused schema injection)' };
   }
 
   @cli({ command: 'execute_job', schema: taskSchema, description: "Executes a specific job based on task details." })
@@ -156,6 +157,15 @@ export class EmailService {
     ctx.stdout.write('Countdown finished!\n');
     // Note: If interactive mode is on, the prompt will appear after this.
     // If one-shot, the app will exit.
+  }
+
+  @mcp({ command: 'process_empty_payload', schema: taskSchema })
+  // This method has a schema but no parameters, which should trigger a validation warning.
+  async processEmptyPayload() {
+    console.log('EmailService: Attempting to process empty payload. A validation warning for zero parameters is expected.');
+    // In a real scenario, this method might perform an action that doesn't require input,
+    // but having a schema associated via decorator without a way to receive it is questionable.
+    return { status: 'Processed empty payload (validation warning expected for zero params)' };
   }
 
   helperMethod() {

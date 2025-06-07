@@ -38,17 +38,49 @@ export function validateServiceDefinition(serviceClass: Function): ValidationSug
     }
 
     if (methodHasSchema) {
-      const parameterMetadatas = metadataStorage.getParameterMetadata(serviceClass, methodName);
-      const hasBodyParam = parameterMetadatas?.some(p => p.type === ParameterType.BODY);
+      // --- New Parameter Count Heuristic Check ---
+      let actualParamCount = -1; // Default to -1 if reflection fails or not applicable
+      if (serviceClass.prototype && typeof serviceClass.prototype[methodName] === 'function') {
+        const designParamTypes = Reflect.getMetadata('design:paramtypes', serviceClass.prototype, methodName);
+        if (designParamTypes) { // designParamTypes can be undefined if no params or no type info
+          actualParamCount = designParamTypes.length;
+        } else if (typeof serviceClass.prototype[methodName] === 'function' && serviceClass.prototype[methodName].length === 0) {
+          // Fallback for functions with zero parameters where design:paramtypes might be undefined
+          actualParamCount = 0;
+        }
+      }
 
-      if (!hasBodyParam) {
+      if (actualParamCount === 0) {
         suggestions.push({
           severity: 'warning',
-          message: `Method '${methodName}' is decorated with ${decoratorNameWithSchema} which includes a schema, but no @Body() parameter was found to receive the schema-validated payload.`,
+          message: `Method '${methodName}' is decorated with ${decoratorNameWithSchema} and defines a data schema, but the method signature has zero parameters. To utilize this schema for data input, consider adding a parameter decorated with an appropriate data injection decorator (e.g., @Body(), @Query(), @Params()).`,
           className,
           methodName,
         });
       }
+      } else if (actualParamCount > 0) {
+        // This branch handles methods that have a schema and > 0 parameters.
+        // Now check if any of these parameters actively use the schema via relevant decorators.
+        const parameterMetadatas = metadataStorage.getParameterMetadata(serviceClass, methodName);
+        const relevantDataInjectionDecorators = [
+          ParameterType.BODY,
+          ParameterType.QUERY,
+          ParameterType.PARAMS
+        ];
+        const schemaIsActivelyInjected = parameterMetadatas?.some(p =>
+          relevantDataInjectionDecorators.includes(p.type)
+        );
+
+        if (!schemaIsActivelyInjected) {
+          suggestions.push({
+            severity: 'warning', // Changed from 'info' to 'warning' for consistency
+            message: `Method '${methodName}' has a schema defined via ${decoratorNameWithSchema}, but no parameters are decorated with @Body(), @Query(), or @Params() to inject this data. Ensure the schema is utilized for data injection if intended.`,
+            className,
+            methodName,
+          });
+        }
+      }
+      // The old "schema but no @Body()" check is now removed / subsumed by the logic above.
     }
 
     // TODO: Add more checks:
