@@ -9,7 +9,9 @@
     "declaration": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "lib": ["ES2022"]
+    "lib": ["ES2022"],
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
