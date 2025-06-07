@@ -4,12 +4,14 @@ import * as readline from 'readline';
 import { metadataStorage } from '../decorators/metadata.storage';
 import { ParameterType } from '../decorators/parameter.options';
 import { ZodError, ZodSchema } from 'zod';
+import { DawaiMiddleware, MiddlewareType } from '../core/middleware.interface'; // Added for middleware
 
 interface CliCommandDetails {
+  methodName: string; // Added to retrieve full method metadata later
   handlerFn: Function;
   serviceInstance: any;
-  commandOptions: any; // From @cli decorator
-  paramMetadatas?: any[];
+  commandOptions: any; // From @cli decorator (contains schema, description, etc.)
+  paramMetadatas?: any[]; // Parameters for the handlerFn itself
 }
 
 export class StdioTransportAdapter extends TransportAdapter {
@@ -52,7 +54,9 @@ export class StdioTransportAdapter extends TransportAdapter {
 
           if (commandDetail) {
             try {
-              const cliOptions = commandDetail.commandOptions;
+              const { serviceInstance, handlerFn, commandOptions: cliOptions, paramMetadatas, methodName: cmdMethodName } = commandDetail;
+              const methodMetadata = metadataStorage.getMethodMetadata(serviceInstance.constructor, cmdMethodName);
+              const middlewareTypes: MiddlewareType[] | undefined = methodMetadata?.useMiddleware;
 
               // Argument Parsing
               const parsedArgs: Record<string, any> = {};
@@ -65,69 +69,95 @@ export class StdioTransportAdapter extends TransportAdapter {
                   positionalArgs.push(arg);
                 }
               }
-              // Assign positional args if needed by schema, e.g., parsedArgs._ = positionalArgs;
-              // For now, primary input for schema is parsedArgs from --key=value flags.
-              let inputDataForValidation: any = parsedArgs;
-              if (positionalArgs.length > 0 && Object.keys(parsedArgs).length === 0) {
-                // If only positional args are present, and schema might expect an array or specific object structure
-                // This part might need refinement based on how schemas for positional args are defined
-                // For a simple case, if schema expects an array, and only positionals are given:
-                // inputDataForValidation = positionalArgs;
-                // However, for now, we assume schema primarily targets named args.
-                // If schema expects an object and gets an array, it will likely fail unless schema is `z.array(z.string())` or similar.
-                // If the schema is for an object, and we have positionals, how to map them?
-                // Defaulting to parsedArgs, but can expose positionalArgs via CTX.
-              }
 
-
-              // Zod Schema Validation
-              if (cliOptions.schema) {
-                const validationResult = (cliOptions.schema as ZodSchema<any>).safeParse(inputDataForValidation);
-                if (!validationResult.success) {
-                  console.error(`Invalid arguments for command '${command}':`);
-                  const fieldErrors = validationResult.error.flatten().fieldErrors;
-                  for (const field in fieldErrors) {
-                    console.error(`  ${field}: ${(fieldErrors[field] as string[]).join(', ')}`);
-                  }
-                  this.rl.prompt();
-                  return;
+              const executeOriginalCliHandler = async () => {
+                // Assign positional args if needed by schema, e.g., parsedArgs._ = positionalArgs;
+                // For now, primary input for schema is parsedArgs from --key=value flags.
+                let inputDataForValidation: any = parsedArgs; // Now refers to parsedArgs from outer scope
+                if (positionalArgs.length > 0 && Object.keys(parsedArgs).length === 0) {
+                  // If only positional args are present, and schema might expect an array or specific object structure
+                  // This part might need refinement based on how schemas for positional args are defined
+                  // For a simple case, if schema expects an array, and only positionals are given:
+                  // inputDataForValidation = positionalArgs;
+                  // However, for now, we assume schema primarily targets named args.
+                  // If schema expects an object and gets an array, it will likely fail unless schema is `z.array(z.string())` or similar.
+                  // If the schema is for an object, and we have positionals, how to map them?
+                  // Defaulting to parsedArgs, but can expose positionalArgs via CTX.
                 }
-                inputDataForValidation = validationResult.data;
-              }
 
-              // Argument Injection
-              const handlerArgs: any[] = [];
-              if (commandDetail.paramMetadatas) {
-                for (const paramMeta of commandDetail.paramMetadatas) {
-                  switch (paramMeta.type) {
-                    case ParameterType.BODY:
-                      handlerArgs[paramMeta.index] = inputDataForValidation;
-                      break;
-                    case ParameterType.PARAMS: // Using PARAMS for specific keys from parsed args
-                      if (paramMeta.key) {
-                        handlerArgs[paramMeta.index] = inputDataForValidation[paramMeta.key];
-                      } else {
-                        // If no key, could pass all parsed args, but BODY is better for that.
+
+                // Zod Schema Validation
+                if (cliOptions.schema) {
+                  const validationResult = (cliOptions.schema as ZodSchema<any>).safeParse(inputDataForValidation);
+                  if (!validationResult.success) {
+                    console.error(`Invalid arguments for command '${command}':`);
+                    const fieldErrors = validationResult.error.flatten().fieldErrors;
+                    for (const field in fieldErrors) {
+                      console.error(`  ${field}: ${(fieldErrors[field] as string[]).join(', ')}`);
+                    }
+                    this.rl.prompt();
+                    return;
+                  }
+                  inputDataForValidation = validationResult.data;
+                }
+
+                // Argument Injection
+                const handlerArgs: any[] = [];
+                if (paramMetadatas) {
+                  for (const paramMeta of paramMetadatas) {
+                    switch (paramMeta.type) {
+                      case ParameterType.BODY:
+                        handlerArgs[paramMeta.index] = inputDataForValidation;
+                        break;
+                      case ParameterType.PARAMS:
+                        if (paramMeta.key) {
+                          handlerArgs[paramMeta.index] = inputDataForValidation[paramMeta.key];
+                        } else {
+                          handlerArgs[paramMeta.index] = undefined;
+                        }
+                        break;
+                      case ParameterType.CTX:
+                        handlerArgs[paramMeta.index] = { command, rawArgs: args, parsedArgs: inputDataForValidation, positionalArgs };
+                        break;
+                      default:
                         handlerArgs[paramMeta.index] = undefined;
-                      }
-                      break;
-                    case ParameterType.CTX:
-                      handlerArgs[paramMeta.index] = {
-                        command,
-                        rawArgs: args, // original string array of args
-                        parsedArgs: inputDataForValidation, // object after parsing and validation
-                        positionalArgs
-                      };
-                      break;
-                    default:
-                      handlerArgs[paramMeta.index] = undefined;
+                    }
                   }
                 }
-              }
 
-              const result = await commandDetail.handlerFn(...handlerArgs);
-              if (result !== undefined) {
-                console.log(JSON.stringify(result, null, 2));
+                const result = await handlerFn(...handlerArgs);
+                if (result !== undefined) {
+                  console.log(JSON.stringify(result, null, 2));
+                }
+              };
+
+              if (middlewareTypes && middlewareTypes.length > 0) {
+                const middlewares = middlewareTypes.map(mw => {
+                  if (typeof mw === 'function' && mw.prototype?.use) {
+                    return new (mw as new (...args: any[]) => DawaiMiddleware)();
+                  }
+                  return mw as DawaiMiddleware;
+                }).filter(mw => typeof mw.use === 'function');
+
+                // CLI context might evolve, for now it's similar to original handler's CTX
+                const cliContext = {
+                  command,
+                  rawArgs: args,
+                  parsedArgs, // Now available from this scope
+                  positionalArgs // Now available from this scope
+                };
+
+                let chain = executeOriginalCliHandler;
+                for (let i = middlewares.length - 1; i >= 0; i--) {
+                  const currentMiddleware = middlewares[i];
+                  const nextInChain = chain;
+                  // Middleware for CLI might need a different context structure or access to parsedArgs
+                  // For now, pass a generic context; `nextInChain` will eventually parse/validate args
+                  chain = async () => currentMiddleware.use(cliContext, nextInChain);
+                }
+                await chain();
+              } else {
+                await executeOriginalCliHandler();
               }
             } catch (error) {
               console.error(`Error executing command ${command}:`, error instanceof Error ? error.message : String(error));
@@ -136,7 +166,7 @@ export class StdioTransportAdapter extends TransportAdapter {
             this.rl.close();
             return; // Prevent prompt after exit
           }
-           else {
+          else {
             console.log(`Unknown command: ${command}. Type 'exit' or 'quit' to close.`);
           }
         }
@@ -167,13 +197,14 @@ export class StdioTransportAdapter extends TransportAdapter {
         console.log(`StdioTransportAdapter: Registering CLI command '${cliOptions.command}' to ${serviceInstance.constructor.name}.${methodName}`);
         const paramMetadatas = metadataStorage.getParameterMetadata(serviceInstance.constructor, methodName);
         this.cliCommands.set(cliOptions.command, {
-          handlerFn: handlerFn.bind(serviceInstance), // Bind to service instance
+          methodName, // Store methodName
+          handlerFn: handlerFn.bind(serviceInstance),
           serviceInstance,
-          commandOptions: cliOptions,
+          commandOptions: cliOptions, // This is CliDecoratorOptions
           paramMetadatas
         });
       } else {
-        console.warn(`StdioTransportAdapter: CLI command for ${methodName} is missing 'command' option.`);
+        console.warn(`StdioTransportAdapter: CLI command for ${serviceInstance.constructor.name}.${methodName} is missing 'command' option.`);
       }
     }
   }
