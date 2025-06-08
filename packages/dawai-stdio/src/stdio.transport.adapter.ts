@@ -1,4 +1,5 @@
-import { TransportAdapter, StdioOptions, metadataStorage, ParameterType, DawaiMiddleware, MiddlewareType } from '@arifwidianto/dawai-microservice';
+import { TransportAdapter, StdioOptions, metadataStorage, DawaiMiddleware, MiddlewareType } from '@arifwidianto/dawai-microservice';
+import { ParameterType } from '@arifwidianto/dawai-common';
 import * as readline from 'readline';
 import { ZodError, ZodSchema, ZodObject, ZodTypeAny } from 'zod';
 
