@@ -1,15 +1,17 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": ".",
     "declaration": true,
     "resolveJsonModule": true,
-    "module": "commonjs",
-    "target": "es2020",
+    "module": "nodenext",
+    "target": "es2022",
     "esModuleInterop": true,
     "strict": true,
     "skipLibCheck": true,
+    "declarationMap": true,
+    "composite": true,
     "tsBuildInfoFile": "./dist/.tsbuildinfo"
   },
   "include": ["src/**/*.ts", "bin/**/*.ts"],

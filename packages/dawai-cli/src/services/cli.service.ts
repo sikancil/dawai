@@ -1,6 +1,7 @@
 // packages/dawai-cli/src/services/cli.service.ts
 import { z } from 'zod';
-import { cli, Body, Ctx } from '@arifwidianto/dawai-microservice';
+import { cli, Ctx } from '@arifwidianto/dawai-microservice';
+import { Body } from '@arifwidianto/dawai-webservice';
 import fs from 'fs-extra';
 import path from 'path';
 import chalk from 'chalk';
@@ -99,25 +100,39 @@ const transportsNeedingBody = new Set(['cli', 'crud', 'ws', 'mcp', 'a2a', 'rpc',
 
 function generateImportsForService(transports: string[]): string {
   let importString = "import { z } from 'zod';\n";
-  const dawaiServiceImports = new Set<string>();
+  const microserviceImports = new Set<string>();
+  const webserviceImports = new Set<string>();
   let needsBody = false;
 
+  const webserviceDecoratorNames = ['crud', 'ws', 'sse', 'webservice']; // 'webservice' itself is a decorator
+
   transports.forEach(t_raw => {
-      const t = t_raw.toLowerCase(); // Ensure lowercase for map lookup
-      if(validTransportsWithOptions[t]) {
-        dawaiServiceImports.add(t);
-        if (transportsNeedingBody.has(t)) {
-            needsBody = true;
-        }
+    const t = t_raw.toLowerCase(); // Ensure lowercase for map lookup
+    if (validTransportsWithOptions[t]) {
+      if (webserviceDecoratorNames.includes(t) || t === 'body') { // 'body' is a param decorator, but lives in webservice
+        webserviceImports.add(t);
+      } else {
+        microserviceImports.add(t);
       }
+      if (transportsNeedingBody.has(t)) {
+        needsBody = true;
+      }
+    }
   });
+
   if (needsBody) {
-    dawaiServiceImports.add('Body');
+    // Ensure Body is added to webserviceImports if not already present via a transport decorator
+    // (e.g. if 'cli' needs Body, Body comes from webservice)
+    webserviceImports.add('Body');
   }
 
-  if (dawaiServiceImports.size > 0) {
-    const sortedImports = Array.from(dawaiServiceImports).sort();
+  if (microserviceImports.size > 0) {
+    const sortedImports = Array.from(microserviceImports).sort();
     importString += `import { ${sortedImports.join(', ')} } from '@arifwidianto/dawai-microservice';\n`;
+  }
+  if (webserviceImports.size > 0) {
+    const sortedImports = Array.from(webserviceImports).sort();
+    importString += `import { ${sortedImports.join(', ')} } from '@arifwidianto/dawai-webservice';\n`;
   }
   return importString;
 }
@@ -265,7 +280,6 @@ export class ${serviceName} {
       ctx.stdout.write(chalk.red(`Error writing service file ${targetFilePath}: ${error.message}\n`));
       throw new Error(`File writing failed for ${targetFilePath}: ${error.message}`);
     }
-    };
   }
 
   @cli({
@@ -278,7 +292,7 @@ export class ${serviceName} {
     @Ctx() ctx: any
   ) {
     const { appName } = options; // appName is kebab-case
-    const appType = options.type; // options.type will be 'single' or 'mcp' due to schema default
+    const appType = options.type!; // options.type will be 'single' | 'mcp' | 'a2a' due to schema default
     // Ensure toPascalCase from stringUtils handles kebab-case to PascalCase correctly for service name
     const defaultServiceNamePascalCase = options.defaultServiceName || toPascalCase(appName);
 
@@ -305,31 +319,31 @@ export class ${serviceName} {
       ctx.stdout.write(chalk.dim(`Created source and services directories.`) + '\n');
 
       // package.json
-      const packageJsonContent = appGenerator.generatePackageJsonContent(appName);
+      const packageJsonContent = appGen.generatePackageJsonContent(appName, defaultServiceNamePascalCase);
       const packageJsonPath = path.join(rootDir, 'package.json');
       await fs.writeFile(packageJsonPath, packageJsonContent);
       ctx.stdout.write(chalk.dim(`Created ${packageJsonPath}`) + '\n');
 
       // tsconfig.json
-      const tsConfigJsonContent = appGenerator.generateTsConfigJsonContent();
+      const tsConfigJsonContent = appGen.generateTsConfigJsonContent();
       const tsConfigJsonPath = path.join(rootDir, 'tsconfig.json');
       await fs.writeFile(tsConfigJsonPath, tsConfigJsonContent);
       ctx.stdout.write(chalk.dim(`Created ${tsConfigJsonPath}`) + '\n');
 
       // .gitignore
-      const gitIgnoreContent = appGenerator.generateGitIgnoreContent();
+      const gitIgnoreContent = appGen.generateGitIgnoreContent();
       const gitIgnorePath = path.join(rootDir, '.gitignore');
       await fs.writeFile(gitIgnorePath, gitIgnoreContent);
       ctx.stdout.write(chalk.dim(`Created ${gitIgnorePath}`) + '\n');
 
       // src/index.ts
-      const appIndexTsContent = appGenerator.generateAppIndexTsContent(defaultServiceNamePascalCase, appType);
+      const appIndexTsContent = appGen.generateAppIndexTsContent(defaultServiceNamePascalCase, appType as 'single' | 'mcp' | 'a2a'); // Added type assertion
       const appIndexTsPath = path.join(srcDir, 'index.ts');
       await fs.writeFile(appIndexTsPath, appIndexTsContent);
       ctx.stdout.write(chalk.dim(`Created ${appIndexTsPath}`) + '\n');
 
       // src/services/<DefaultServiceName>.service.ts
-      const defaultServiceContent = appGenerator.generateDefaultServiceContent(defaultServiceNamePascalCase, appType);
+      const defaultServiceContent = appGen.generateDefaultServiceContent(defaultServiceNamePascalCase, appType as 'single' | 'mcp' | 'a2a'); // Added type assertion
       const defaultServicePath = path.join(servicesDir, `${defaultServiceNamePascalCase}.service.ts`);
       await fs.writeFile(defaultServicePath, defaultServiceContent);
       ctx.stdout.write(chalk.dim(`Created ${defaultServicePath}`) + '\n');
@@ -371,7 +385,8 @@ export class ${serviceName} {
     @Body() options: GenerateMonorepoOptions,
     @Ctx() ctx: any
   ) {
-    const { monorepoName, services, sharedPackages, monorepoManager } = options;
+    const { monorepoName, services, sharedPackages } = options;
+    const monorepoManager = options.monorepoManager!; // Will be 'npm' | 'yarn' | 'pnpm' | 'lerna' due to schema default
     const rootDir = path.resolve(process.cwd(), monorepoName);
 
     ctx.stdout.write(chalk.blue(`Generating monorepo '${monorepoName}'...\n`));
@@ -479,7 +494,7 @@ export class ${serviceName} {
       // if (await fs.pathExists(rootDir)) {
       //   await fs.remove(rootDir);
       // }
-      throw new Error(`Monorepo generation failed: ${error.message}`);
+      throw new Error(`App generation failed: ${error.message}`);
     }
   }
 }

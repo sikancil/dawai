@@ -25,8 +25,7 @@ export function generatePackageJsonContent(appNameKebabCase: string, _defaultSer
     dependencies: {
       "@arifwidianto/dawai-microservice": "0.1.0", // Use actual version later
       "@arifwidianto/dawai-stdio": "0.1.0",
-      // Assuming @arifwidianto/dawai-http-transport is the name for the http adapter package
-      "@arifwidianto/dawai-http-transport": "0.1.0",
+      "@arifwidianto/dawai-webservice": "0.1.0",
       "zod": "^3.22.0",
       "reflect-metadata": "^0.1.13" // Added reflect-metadata
     },
@@ -131,9 +130,8 @@ export function generateAppIndexTsContent(defaultServiceNamePascalCase: string, 
 
 
   return `
-import { Microservice, MicroserviceOptions, HttpTransportAdapter } from '@arifwidianto/dawai-microservice';
-// If HttpTransportAdapter is in its own package:
-// import { HttpTransportAdapter } from '@arifwidianto/dawai-http-transport';
+import { Microservice, MicroserviceOptions } from '@arifwidianto/dawai-microservice';
+import { WebServiceTransportAdapter } from '@arifwidianto/dawai-webservice';
 import { StdioTransportAdapter } from '@arifwidianto/dawai-stdio';
 import { ${defaultServiceNamePascalCase} } from './services/${defaultServiceNamePascalCase}.service';
 import 'reflect-metadata'; // Ensure metadata reflection is enabled
@@ -156,7 +154,7 @@ async function bootstrap() {
 
   const app = new Microservice(${defaultServiceNamePascalCase}, microserviceOptions);
 
-  app.registerTransport(new HttpTransportAdapter());
+  app.registerTransport(new WebServiceTransportAdapter());
   app.registerTransport(new StdioTransportAdapter());
 
   try {
@@ -193,22 +191,31 @@ signals.forEach(signal => {
 }
 
 export function generateDefaultServiceContent(defaultServiceNamePascalCase: string, appType: 'single' | 'mcp' | 'a2a'): string {
-  const imports = new Set<string>(['Ctx', 'cli']);
+  const microserviceImports = new Set<string>(['Ctx', 'cli']);
+  const webserviceImports = new Set<string>();
   let needsZodImport = false;
 
   if (appType === 'mcp') {
-    imports.add('mcp');
-    imports.add('Body');
+    microserviceImports.add('mcp');
+    webserviceImports.add('Body'); // Body decorator from webservice
     needsZodImport = true;
   }
   if (appType === 'a2a') {
-    imports.add('a2a');
-    imports.add('Body');
+    microserviceImports.add('a2a');
+    webserviceImports.add('Body'); // Body decorator from webservice
     needsZodImport = true;
   }
 
-  const sortedImports = Array.from(imports).sort();
-  const importStatement = `import { ${sortedImports.join(', ')} } from '@arifwidianto/dawai-microservice';`;
+  const sortedMicroserviceImports = Array.from(microserviceImports).sort();
+  const sortedWebserviceImports = Array.from(webserviceImports).sort();
+
+  let importStatement = '';
+  if (sortedMicroserviceImports.length > 0) {
+    importStatement += `import { ${sortedMicroserviceImports.join(', ')} } from '@arifwidianto/dawai-microservice';\n`;
+  }
+  if (sortedWebserviceImports.length > 0) {
+    importStatement += `import { ${sortedWebserviceImports.join(', ')} } from '@arifwidianto/dawai-webservice';`;
+  }
   const zodImportStatement = needsZodImport ? "import { z } from 'zod';" : "// import { z } from 'zod';";
 
   const mcpSchemaContent = appType === 'mcp' ? `
