@@ -1,0 +1,36 @@
+{
+  "name": "@arifwidianto/dawai-webservice",
+  "version": "0.1.0",
+  "description": "Webservice transport adapter for the Dawai microservice framework",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch"
+  },
+  "dependencies": {
+    "@arifwidianto/dawai-common": "0.1.0",
+    "@arifwidianto/dawai-microservice": "0.1.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "express-ws": "^5.0.2",
+    "ws": "^8.18.2"
+  },
+  "peerDependencies": {
+    "zod": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/express-ws": "^3.0.5",
+    "@types/node": "^20.11.19",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.8.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}
