@@ -1,89 +1,21 @@
-import { CorsOptions } from 'cors';
-import { Options as RateLimitOptions } from 'express-rate-limit';
-import { ZodSchema } from 'zod';
+import { ZodSchema } from 'zod'; // Retain ZodSchema if other options use it. CorsOptions and RateLimitOptions are removed as they were specific to WebserviceOptions.
 
 // Main container for all microservice configurations
 export interface MicroserviceOptions {
-  webservice?: WebserviceOptions;
+  // webservice?: WebserviceOptions; // This will be imported from the new package if needed at the top level
   stdio?: StdioOptions;
   mcpClient?: McpClientOptions;
   mcpServer?: McpServerOptions;
   a2aAgent?: A2aAgentOptions;
 }
 
-// Transport-level configuration
-export interface WebserviceOptions {
-  enabled: boolean;
-  options: {
-    port?: number;
-    host?: string;
-    https?: {
-      enabled: boolean;
-      options: {
-        key: string;
-        cert: string;
-        ca?: string;
-        passphrase?: string;
-      };
-    };
-    cors?: {
-      enabled: boolean;
-      options?: CorsOptions;
-    };
-    security?: {
-      rateLimit?: {
-        enabled: boolean;
-        options?: Partial<RateLimitOptions>;
-      };
-      defaultHeaders?: Record<string, string>;
-      trustProxy?: boolean;
-    };
-    bodyParser?: {
-      json?: any;
-      urlencoded?: any;
-      text?: any;
-      maxBodySize?: string;
-    };
-    logging?: {
-      enabled: boolean;
-      options?: {
-        format?: string;
-        level?: 'info' | 'warn' | 'error';
-      };
-    };
-    performance?: {
-      requestTimeout?: number;
-      sseKeepAliveIntervalMs?: number;
-    };
-    websocket?: {
-      path?: string;
-      options?: any; // e.g., ws.ServerOptions
-    };
-    crud?: {
-      enabled?: boolean;
-      options?: {
-        basePath?: string;
-      };
-    };
-    sse?: {
-      enabled?: boolean;
-      options?: {
-        basePath?: string;
-      };
-    };
-    rpc?: {
-      enabled?: boolean;
-      options?: {
-        basePath?: string;
-      };
-    };
-  };
-}
+// StdioOptions, McpClientOptions, McpServerOptions, A2aAgentOptions remain unchanged below
 
 export interface StdioOptions {
   enabled: boolean;
   options?: {
     interactive?: boolean;
+    prompt?: string;
   };
 }
 

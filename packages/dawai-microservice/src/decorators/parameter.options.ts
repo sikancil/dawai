@@ -1,15 +1,4 @@
-export enum ParameterType {
-  BODY,
-  PARAMS,
-  QUERY,
-  HEADERS,
-  COOKIES,
-  SESSION,
-  FILES,
-  CTX,
-  REQ,
-  RES
-}
+import { ParameterType } from '@arifwidianto/dawai-common';
 
 export interface ParameterDecoratorMetadata {
   index: number; // Parameter index in the method signature

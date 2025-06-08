@@ -1,4 +1,5 @@
-import { ParameterDecoratorMetadata, ParameterType } from './parameter.options';
+import { ParameterDecoratorMetadata } from './parameter.options';
+import { ParameterType } from '@arifwidianto/dawai-common';
 
 export class MetadataStorage {
   private static instance: MetadataStorage;

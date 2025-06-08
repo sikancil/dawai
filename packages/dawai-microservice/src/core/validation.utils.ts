@@ -1,5 +1,6 @@
 import { metadataStorage } from '../decorators/metadata.storage';
-import { ParameterType } from '../decorators/parameter.options';
+import { ParameterType } from '@arifwidianto/dawai-common';
+import 'reflect-metadata'; // Required for Reflect.getMetadata
 // Import relevant decorator option types if needed for deeper schema checks, for now, checking existence of 'schema' property is enough.
 // import { McpDecoratorOptions, RpcDecoratorOptions, A2aDecoratorOptions, CliDecoratorOptions, CrudDecoratorOptions, WsDecoratorOptions, LlmDecoratorOptions } from '../decorator.options';
 
@@ -67,9 +68,9 @@ export function validateServiceDefinition(serviceClass: Function): ValidationSug
       }
     }
 
+    let actualParamCount = -1; // Default to -1 if reflection fails or not applicable
     if (methodHasSchema) {
       // --- New Parameter Count Heuristic Check ---
-      let actualParamCount = -1; // Default to -1 if reflection fails or not applicable
       if (serviceClass.prototype && typeof serviceClass.prototype[methodName] === 'function') {
         const designParamTypes = Reflect.getMetadata('design:paramtypes', serviceClass.prototype, methodName);
         if (designParamTypes) { // designParamTypes can be undefined if no params or no type info
@@ -93,35 +94,34 @@ export function validateServiceDefinition(serviceClass: Function): ValidationSug
           suggestionCode: 'DAWAI-VAL-SCHEMA001'
         });
       }
-      } else if (actualParamCount > 0) {
-        // This branch handles methods that have a schema and > 0 parameters.
-        // Now check if any of these parameters actively use the schema via relevant decorators.
-        const parameterMetadatas = metadataStorage.getParameterMetadata(serviceClass, methodName);
-        const relevantDataInjectionDecorators = [
-          ParameterType.BODY,
-          ParameterType.QUERY,
-          ParameterType.PARAMS
-        ];
-        const schemaIsActivelyInjected = parameterMetadatas?.some(p =>
-          relevantDataInjectionDecorators.includes(p.type)
-        );
+    } else if (actualParamCount > 0) {
+      // This branch handles methods that have a schema and > 0 parameters.
+      // Now check if any of these parameters actively use the schema via relevant decorators.
+      const parameterMetadatas = metadataStorage.getParameterMetadata(serviceClass, methodName);
+      const relevantDataInjectionDecorators = [
+        ParameterType.BODY,
+        ParameterType.QUERY,
+        ParameterType.PARAMS
+      ];
+      const schemaIsActivelyInjected = parameterMetadatas?.some(p =>
+        relevantDataInjectionDecorators.includes(p.type)
+      );
 
-        if (!schemaIsActivelyInjected) {
-          suggestions.push({
-            severity: 'warning',
-            message: `Method '${methodName}' has a schema defined via ${decoratorNameWithSchema}, but no parameters are decorated with @Body(), @Query(), or @Params() to inject this data. Ensure the schema is utilized for data injection if intended.`,
-            className,
-            methodName,
-            decoratorInvolved: decoratorNameWithSchema,
-            keyInvolved: 'parameterDecorators',
-            expectedPattern: 'At least one parameter decorated with @Body(), @Query(), or @Params().',
-            actualPattern: 'No parameters found with @Body(), @Query(), or @Params() decorators.',
-            suggestionCode: 'DAWAI-VAL-SCHEMA002'
-          });
-        }
+      if (!schemaIsActivelyInjected) {
+        suggestions.push({
+          severity: 'warning',
+          message: `Method '${methodName}' has a schema defined via ${decoratorNameWithSchema}, but no parameters are decorated with @Body(), @Query(), or @Params() to inject this data. Ensure the schema is utilized for data injection if intended.`,
+          className,
+          methodName,
+          decoratorInvolved: decoratorNameWithSchema,
+          keyInvolved: 'parameterDecorators',
+          expectedPattern: 'At least one parameter decorated with @Body(), @Query(), or @Params().',
+          actualPattern: 'No parameters found with @Body(), @Query(), or @Params() decorators.',
+          suggestionCode: 'DAWAI-VAL-SCHEMA002'
+        });
       }
-      // The old "schema but no @Body()" check is now removed / subsumed by the logic above.
     }
+    // The old "schema but no @Body()" check is now removed / subsumed by the logic above.
 
     // Check for @Body() on HTTP GET/DELETE methods decorated with @crud
     if (methodMeta.crud && (methodMeta.crud.method === 'GET' || methodMeta.crud.method === 'DELETE')) {
@@ -146,11 +146,11 @@ export function validateServiceDefinition(serviceClass: Function): ValidationSug
         }
       }
     }
-
-    // TODO: Add more checks:
-    // - Parameter decorator specific checks (e.g., @Param without a key if not on HTTP transport)
-    // - Check for unknown decorators if feasible
   }
 
+  // TODO: Add more checks:
+  // - Parameter decorator specific checks (e.g., @Param without a key if not on HTTP transport)
+  // - Check for unknown decorators if feasible
+  
   return suggestions;
 }
