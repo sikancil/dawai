@@ -1,5 +1,4 @@
-import { metadataStorage } from '@arifwidianto/dawai-microservice';
-import { ParameterType } from '@arifwidianto/dawai-common';
+import { ParameterType, metadataStorage } from '@arifwidianto/dawai-common';
 
 export function Cookies(cookieName?: string): ParameterDecorator {
   return function (target: Object, propertyKey: string | symbol | undefined, parameterIndex: number) {

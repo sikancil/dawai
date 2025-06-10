@@ -1,5 +1,4 @@
-import { CrudDecoratorOptions } from '../decorator.options';
-import { metadataStorage } from '@arifwidianto/dawai-microservice';
+import { CrudDecoratorOptions, metadataStorage } from '@arifwidianto/dawai-common';
 
 export function crud(options: CrudDecoratorOptions): MethodDecorator {
   return function<T> (

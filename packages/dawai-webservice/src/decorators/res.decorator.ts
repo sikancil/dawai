@@ -1,5 +1,4 @@
-import { metadataStorage } from '@arifwidianto/dawai-microservice';
-import { ParameterType } from '@arifwidianto/dawai-common';
+import { ParameterType, metadataStorage } from '@arifwidianto/dawai-common';
 
 export function Res(): ParameterDecorator {
   return function (target: Object, propertyKey: string | symbol | undefined, parameterIndex: number) {
@@ -7,7 +6,7 @@ export function Res(): ParameterDecorator {
       target.constructor,
       propertyKey as string,
       parameterIndex,
-      ParameterType.RES
+      ParameterType.RESPONSE
     );
   };
 }

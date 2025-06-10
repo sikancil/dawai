@@ -4,10 +4,12 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "declaration": true,
+    "declarationMap": true,
+    // "composite": true,
   },
   "include": ["src/**/*"],
-  "references": [
-    // { "path": "../dawai-common" },
-    // { "path": "../dawai-microservice" }
-  ]
+  // "references": [
+  //   { "path": "../dawai-common" },
+  //   { "path": "../dawai-microservice" }
+  // ]
 }
