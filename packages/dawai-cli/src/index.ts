@@ -1,4 +1,6 @@
-import { Microservice, MicroserviceOptions } from '@arifwidianto/dawai-microservice';
+import 'reflect-metadata';
+import { Microservice } from '@arifwidianto/dawai-microservice';
+import { MicroserviceOptions } from '@arifwidianto/dawai-common';
 import { StdioTransportAdapter } from '@arifwidianto/dawai-stdio';
 import { DawaiCliService } from './services/cli.service';
 import chalk from 'chalk';
@@ -31,7 +33,9 @@ async function main() {
   // or if the adapter internally uses the configKey 'stdio' to fetch from MicroserviceOptions.
   // Since StdioTransportAdapter is initialized with options from Microservice's bootstrap method based on configKey,
   // the options in microserviceOptions will take precedence.
-  cliApp.registerTransport(new StdioTransportAdapter());
+  cliApp.registerTransport(
+    new StdioTransportAdapter(microserviceOptions, cliApp.getServiceInstance())
+  );
 
   try {
     await cliApp.bootstrap(); // Initializes adapters with config from microserviceOptions

@@ -1,5 +1,3 @@
-// packages/dawai-cli/src/generators/monorepo.generator.ts
-
 export function generateMonorepoPackageJsonContent(
   monorepoName: string,
   manager: 'npm' | 'yarn' | 'pnpm' | 'lerna',

@@ -1,5 +1,4 @@
-// packages/dawai-cli/src/generators/shared_package.generator.ts
-import { toCamelCase } from '../utils/stringUtils'; // Assuming stringUtils is one level up from generators
+import { TextCase } from '@arifwidianto/dawai-common';
 
 export function generateSharedPackageJsonContent(packageName: string, monorepoScope?: string): string {
   const name = monorepoScope ? `@${monorepoScope}/${packageName}` : packageName;
@@ -41,7 +40,7 @@ export function generateSharedPackageTsConfigJsonContent(relativePathToRoot: str
 }
 
 export function generateSharedPackageIndexTsContent(packageName: string): string {
-  const camelCasePackageName = toCamelCase(packageName);
+  const camelCasePackageName = TextCase.camelCase(packageName);
   return `// packages/${packageName}/src/index.ts
 
 // Example export:
@@ -62,6 +61,6 @@ export function getGreetingFrom${toPascalCase(camelCasePackageName)}(): string {
 // Helper for toPascalCase if not imported, or ensure it's available via stringUtils
 function toPascalCase(str: string): string {
     if (!str) return '';
-    const camelCase = toCamelCase(str); // First convert to camelCase to handle various inputs
+    const camelCase = TextCase.camelCase(str); // First convert to camelCase to handle various inputs
     return camelCase.charAt(0).toUpperCase() + camelCase.slice(1);
 }
