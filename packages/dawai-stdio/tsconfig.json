@@ -3,9 +3,15 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "composite": true,
     "declaration": true,
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "declarationMap": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    // "composite": true
   },
   "include": ["src/**/*"],
+  // "references": [ // Adding references as it's likely needed if others refer to it or it refers to others
+  //   { "path": "../dawai-common" },
+  //   { "path": "../dawai-microservice" }
+  // ]
 }

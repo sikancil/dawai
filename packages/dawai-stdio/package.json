@@ -9,15 +9,21 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "dependencies": {
-    "@arifwidianto/dawai-microservice": "0.1.0"
+    "@arifwidianto/dawai-common": "0.1.0",
+    "@arifwidianto/dawai-microservice": "0.1.0",
+    "chalk": "^5.4.1",
+    "yargs": "^17.7.2"
   },
   "peerDependencies": {
     "zod": "^3.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
-    "@types/node": "^20.11.19"
+    "@types/node": "^20.11.19",
+    "@types/yargs": "^17.0.32",
+    "typescript": "^5.8.3"
   },
-  "publishConfig": { "access": "public" },
+  "publishConfig": {
+    "access": "public"
+  },
   "license": "MIT"
 }
