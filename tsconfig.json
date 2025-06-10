@@ -7,21 +7,22 @@
     "strict": true,
     "skipLibCheck": true,
     "declaration": true,
+    "declarationMap": true,
     "composite": false,
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
-    // "baseUrl": ".",
+    // "baseUrl": ".", // Set baseUrl to the monorepo root
     // "paths": {
-    //   "@arifwidianto/*": ["packages/*/src"]
+    //   "@arifwidianto/*": ["packages/*"] // Map to package roots
     // },
     "lib": ["ES2022"]
   },
-  "references": [
-    { "path": "./packages/dawai-common" },
-    { "path": "./packages/dawai-microservice" },
-    { "path": "./packages/dawai-webservice" },
-    { "path": "./packages/dawai-stdio" },
-    { "path": "./packages/dawai-cli" }
-  ],
-  "exclude": ["node_modules", "**/dist"]
+  // "references": [
+  //   { "path": "./packages/dawai-common" },
+  //   { "path": "./packages/dawai-microservice" },
+  //   { "path": "./packages/dawai-webservice" },
+  //   { "path": "./packages/dawai-stdio" },
+  //   { "path": "./packages/dawai-cli" }
+  // ],
+  "exclude": ["node_modules", "**/dist", "TEMP_TRIAL"]
 }

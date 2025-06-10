@@ -2,6 +2,7 @@
   "name": "dawai-framework-monorepo",
   "private": true,
   "devDependencies": {
+    "@nx/js": "^21.1.3",
     "lerna": "^8.1.2",
     "typescript": "^5.8.3"
   },
