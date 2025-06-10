@@ -1,3 +1,3 @@
-export * from './middleware.interface';
+export * from './parameter.decorators';
+export * from './transport.adapter';
 export * from './microservice';
-export * from './validation.utils';
